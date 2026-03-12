@@ -1,7 +1,10 @@
 from fastapi import FastAPI
+from src.api.routes import router
+from src.core.config import settings
 
-app = FastAPI(title="Multivector RAG")
+app = FastAPI(title=settings.app_name)
+app.include_router(router)
+# if __name__ == "__main__":
+#     import uvicorn
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+#     uvicorn.run(app, host=settings.host, port=settings.port)

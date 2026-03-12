@@ -1,23 +1,34 @@
+from typing import List, Dict, Any
 from rank_bm25 import BM25Okapi
+
 
 class BM25Index:
     def __init__(self):
-        self.docs = []
-        self.doc_ids = []
-        self.index = None
+        self.rows: List[Dict[str, Any]] = []
+        self.corpus_tokens: List[List[str]] = []
+        self.index: BM25Okapi | None = None
 
-    def build(self, rows: list[dict]):
-        self.docs = [r["chunk_text"].split() for r in rows]
-        self.doc_ids = [r["id"] for r in rows]
-        self.index = BM25Okapi(self.docs)
+    def build(self, rows: List[Dict[str, Any]]) -> None:
+        valid_rows = [r for r in rows if r.get("chunk_text") and r.get("id") != "init"]
+        self.rows = valid_rows
+        self.corpus_tokens = [r["chunk_text"].lower().split() for r in valid_rows]
+        self.index = BM25Okapi(self.corpus_tokens) if self.corpus_tokens else None
 
-    def search(self, query: str, top_k: int = 10):
+    def search(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
         if self.index is None:
             return []
-        scores = self.index.get_scores(query.split())
+
+        scores = self.index.get_scores(query.lower().split())
         ranked = sorted(
-            zip(self.doc_ids, scores),
+            zip(self.rows, scores),
             key=lambda x: x[1],
-            reverse=True
+            reverse=True,
         )[:top_k]
-        return [{"id": doc_id, "score": float(score)} for doc_id, score in ranked]
+
+        return [
+            {
+                **row,
+                "bm25_score": float(score),
+            }
+            for row, score in ranked
+        ]

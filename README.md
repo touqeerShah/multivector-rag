@@ -32,11 +32,17 @@ uv add pymupdf pillow
 uv add rank-bm25 numpy scipy pandas
 uv add transformers torch
 uv add pytest httpx
-
+uv add pillow pyarrow
+uv add colpali-engine transformers
 
 uv run uvicorn src.main:app --reload
 
+curl -X POST "http://127.0.0.1:8000/upload" \
+  -F "file=@$HOME/Downloads/test-tile.pdf"
 
+curl --get "http://127.0.0.1:8000/search" \
+  --data-urlencode "q=prompt" \
+  --data-urlencode "top_k=5" | python -m json.tool
 
 Here is the actual order.
 
@@ -115,3 +121,53 @@ build prompt
 return cited answer
 
 That sequence keeps the project usable at every step.
+
+
+==============
+I would make your first week look like this:
+
+Day 1
+
+initialize with uv
+
+create folders
+
+make FastAPI run
+
+write chunking and PDF extraction
+
+Day 2
+
+build BM25
+
+build dense retriever
+
+add hybrid fusion
+
+test on 2–3 sample PDFs
+
+Day 3
+
+add page-image indexing schema
+
+store image paths + page metadata
+
+expose /ingest/pdf
+
+Day 4
+
+add ColQwen2 wrapper interface
+
+add ColBERT wrapper interface
+
+implement router
+
+Day 5
+
+wire LangGraph around the flow
+
+add logs and debug payloads
+
+start evaluation dataset
+
+That gets you a working skeleton without hiding the architecture.

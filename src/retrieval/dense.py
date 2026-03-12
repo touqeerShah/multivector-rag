@@ -1,18 +1,31 @@
-from transformers import AutoTokenizer, AutoModel
-import torch
-import torch.nn.functional as F
+from sentence_transformers import SentenceTransformer
+from typing import List
+from functools import lru_cache
 
-class DenseTextEmbedder:
+
+@lru_cache
+def get_sentence_transformer(
+    model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+):
+    return SentenceTransformer(model_name)
+
+
+class DenseEmbedder:
     def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModel.from_pretrained(model_name)
+        self.model = get_sentence_transformer(model_name)
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        encoded = self.tokenizer(
-            texts, padding=True, truncation=True, return_tensors="pt"
+    def embed_texts(self, texts: List[str]) -> List[List[float]]:
+        vectors = self.model.encode(
+            texts,
+            normalize_embeddings=True,
+            show_progress_bar=False,
         )
-        with torch.no_grad():
-            out = self.model(**encoded)
-            cls = out.last_hidden_state[:, 0]
-            cls = F.normalize(cls, p=2, dim=1)
-        return cls.cpu().tolist()
+        return vectors.tolist()
+
+    def embed_query(self, query: str) -> List[float]:
+        vector = self.model.encode(
+            [query],
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        return vector[0].tolist()
