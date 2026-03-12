@@ -1,0 +1,27 @@
+[project]
+name = "multivector-rag"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.135.1",
+    "httpx>=0.28.1",
+    "lancedb>=0.29.2",
+    "langchain>=1.2.12",
+    "langgraph>=1.1.2",
+    "numpy>=2.4.3",
+    "pandas>=3.0.1",
+    "pillow>=12.1.1",
+    "pyarrow>=23.0.1",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "pymupdf>=1.27.2",
+    "pytest>=9.0.2",
+    "rank-bm25>=0.2.2",
+    "scipy>=1.17.1",
+    "tantivy>=0.25.1",
+    "torch>=2.10.0",
+    "transformers>=5.3.0",
+    "uvicorn>=0.41.0",
+]
