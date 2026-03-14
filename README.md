@@ -44,6 +44,33 @@ curl --get "http://127.0.0.1:8000/search" \
   --data-urlencode "q=prompt" \
   --data-urlencode "top_k=5" | python -m json.tool
 
+
+10) Expected flow now
+Step A
+
+Ingest PDF pages:
+
+curl -X POST "http://127.0.0.1:8000/ingest/pdf" \
+  -F "file=@$HOME/Downloads/test-tile.pdf"
+Step B
+
+Check placeholder page rows:
+
+curl "http://127.0.0.1:8000/debug/pages" | python -m json.tool
+Step C
+
+Embed page images with ColQwen2:
+
+curl -X POST "http://127.0.0.1:8000/visual/embed-pages" | python -m json.tool
+Step D
+
+Search visually:
+
+curl --get "http://127.0.0.1:8000/visual/search" \
+  --data-urlencode "q=prompt" \
+  --data-urlencode "top_k=5" | python -m json.tool
+
+
 Here is the actual order.
 
 Milestone 1
@@ -91,6 +118,36 @@ query embedding
 page-image embedding
 
 page candidate scoring
+
+6) Milestone 4: add ColQwen2 pipeline
+
+For ColQwen2 today, the practical path is to use colpali-engine. The official ColQwen2 model card states the model produces ColBERT-style multi-vector embeddings for text and images, and the current usage notes point to colpali-engine for inference.
+
+Important design choice
+
+For milestone 4, do not try to store full multi-vectors in LanceDB yet.
+
+Instead:
+
+compute ColQwen2 page embeddings
+
+pool them into one page-level vector for candidate retrieval
+
+compute ColQwen2 query embeddings
+
+pool them into one query vector
+
+use page-level vector search for first-stage candidate selection
+
+This is not full late interaction yet, but it gives you:
+
+real ColQwen2 image encoding
+
+real ColQwen2 query encoding
+
+real page candidate scoring
+
+a clean bridge to later full multi-vector scoring
 
 Milestone 5
 
