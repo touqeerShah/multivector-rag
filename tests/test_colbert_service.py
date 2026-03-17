@@ -4,6 +4,7 @@ import pytest
 
 from src.retrieval.colbert_service import (
     ColBERTEnvironmentError,
+    OfficialColBERTService,
     ensure_colbert_runtime_compatible,
 )
 
@@ -31,3 +32,13 @@ def test_colbert_runtime_rejects_transformers_5_stack():
     message = str(exc_info.value)
     assert "transformers=5.3.0" in message
     assert "dedicated ColBERT project environment" in message
+
+
+def test_safe_partition_count_caps_small_corpora():
+    safe = OfficialColBERTService._safe_partition_count(
+        requested=32,
+        sample_embeddings=9,
+        max_partitions=128,
+    )
+
+    assert safe == 8

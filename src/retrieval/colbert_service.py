@@ -69,6 +69,20 @@ class OfficialColBERTService:
         self.mapping_path = mapping_path
         self.max_partitions = max_partitions
 
+    @staticmethod
+    def _safe_partition_count(
+        requested: int,
+        sample_embeddings: int,
+        max_partitions: int,
+    ) -> int:
+        capped = max(1, min(requested, sample_embeddings, max_partitions))
+
+        power_of_two = 1
+        while (power_of_two * 2) <= capped:
+            power_of_two *= 2
+
+        return power_of_two
+
     def build_index(
         self,
         collection_tsv_path: str,
@@ -105,6 +119,29 @@ class OfficialColBERTService:
         def patched_setup(indexer_self):
             _log("[Phase 1/4] Setup: sampling passages and estimating corpus size…")
             original_setup(indexer_self)
+
+            sample_embeddings = getattr(indexer_self, "num_sample_embs", None)
+            if hasattr(sample_embeddings, "item"):
+                sample_embeddings = int(sample_embeddings.item())
+
+            if isinstance(sample_embeddings, int) and sample_embeddings > 0:
+                requested = getattr(indexer_self, "num_partitions", 1)
+                safe_partitions = self._safe_partition_count(
+                    requested=requested,
+                    sample_embeddings=sample_embeddings,
+                    max_partitions=self.max_partitions,
+                )
+
+                if safe_partitions != requested:
+                    indexer_self.num_partitions = safe_partitions
+                    indexer_self._save_plan()
+                    _log(
+                        "[Phase 1/4] Setup adjusted for small corpus: "
+                        f"sample_embeddings={sample_embeddings}, "
+                        f"requested_partitions={requested}, "
+                        f"using_partitions={safe_partitions}."
+                    )
+
             parts = getattr(indexer_self, "num_partitions", "?")
             embs = getattr(indexer_self, "num_embeddings_est", "?")
             _log(

@@ -54,11 +54,12 @@ uv python install 3.10
 uv venv --python 3.10 .venv-colbert
 source .venv-colbert/bin/activate
 
-source .venv-colbert/bin/activate
+source colbert-env/.venv/bin/activate
 uv sync --project colbert-env
 deactivate
 
-source .venv-colpali/bin/activate
+source colpali-env/.venv/bin/activate
+
 uv sync --project colpali-env
 deactivate
 
@@ -100,7 +101,7 @@ For ColBERT endpoints, do not use `uv run uvicorn src.main:app --reload` from th
 ### Upload / Ingest a PDF
 ```bash
 curl -X POST "http://127.0.0.1:8000/ingest/pdf" \
-  -F "file=@$HOME/Downloads/test-tile.pdf"
+  -F "file=@$/home/ubuntu/file-sample_150kB.pdf"
 ```
 
 ### Search (text retrieval)
