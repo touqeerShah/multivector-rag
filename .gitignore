@@ -212,5 +212,5 @@ data
 external
 .venv-colbert
 .venv-colpali
-colpali-env
-colbert-env
+colbert-env/.venv
+colpali-env/.venv

@@ -1,0 +1,34 @@
+[project]
+name = "multivector-rag-colpali"
+version = "0.1.0"
+description = "ColPali multimodal retrieval environment"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "colpali-engine>=0.3.14",
+    "fastapi>=0.135.1",
+    "httpx>=0.28.1",
+    "lancedb>=0.29.2",
+    "langchain>=1.2.12",
+    "langgraph>=1.1.2",
+    "numpy>=2.0",
+    "pandas>=2.3.3",
+    "pillow>=12.1.1",
+    "pyarrow>=23.0.1",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "pymupdf>=1.27.2",
+    "pymupdf4llm>=1.27.2.1",
+    "pytest>=9.0.2",
+    "python-multipart>=0.0.22",
+    "scipy>=1.17.1",
+    "sentence-transformers>=5.3.0",
+    "setuptools>=70",
+    "torch>=2.4,<3",
+    "transformers>=5,<6",
+    "uvicorn>=0.41.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
