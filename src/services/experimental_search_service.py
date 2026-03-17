@@ -19,6 +19,17 @@ class ExperimentalSearchService:
         rows = self.store.all_text_rows()
         self.bm25.build(rows)
 
+    def _public_hits(self, hits):
+        public_hits = []
+        for hit in hits:
+            public_hit = {
+                key: value
+                for key, value in hit.items()
+                if key not in {"vector", "visual_vector"}
+            }
+            public_hits.append(public_hit)
+        return public_hits
+
     def _join_hits_with_metadata(self, hits):
         row_map = {row["id"]: row for row in self.store.all_text_rows()}
         joined = []
@@ -49,8 +60,8 @@ class ExperimentalSearchService:
                 "hybrid": len(hybrid_hits[:top_k]),
                 "colbert": len(colbert_joined),
             },
-            "bm25": bm25_hits,
-            "dense": dense_hits,
-            "hybrid": hybrid_hits[:top_k],
-            "colbert": colbert_joined,
+            "bm25": self._public_hits(bm25_hits),
+            "dense": self._public_hits(dense_hits),
+            "hybrid": self._public_hits(hybrid_hits[:top_k]),
+            "colbert": self._public_hits(colbert_joined),
         }

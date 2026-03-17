@@ -20,6 +20,17 @@ class SearchService:
         rows = self.store.all_text_rows()
         self.bm25.build(rows)
 
+    def _public_hits(self, hits):
+        public_hits = []
+        for hit in hits:
+            public_hit = {
+                key: value
+                for key, value in hit.items()
+                if key not in {"vector", "visual_vector"}
+            }
+            public_hits.append(public_hit)
+        return public_hits
+
     def search(self, query: str, top_k: int = 10) -> Dict[str, Any]:
         self.rebuild_bm25()
 
@@ -45,8 +56,8 @@ class SearchService:
                 "hybrid": len(hybrid_hits[:top_k]),
                 "reranked": len(reranked_hits),
             },
-            "bm25": bm25_hits,
-            "dense": dense_hits,
-            "hybrid": hybrid_hits[:top_k],
-            "reranked": reranked_hits,
+            "bm25": self._public_hits(bm25_hits),
+            "dense": self._public_hits(dense_hits),
+            "hybrid": self._public_hits(hybrid_hits[:top_k]),
+            "reranked": self._public_hits(reranked_hits),
         }
