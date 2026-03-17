@@ -3,17 +3,25 @@ from __future__ import annotations
 from typing import Dict, Any, List
 
 from src.retrieval.store import RetrievalStore
-from src.rerank.colqwen import ColQwen2Service
 
 
 class VisualIndexingService:
     def __init__(self):
         self.store = RetrievalStore()
-        self.colqwen = ColQwen2Service()
+        self._colqwen = None
+
+    def _colqwen_service(self):
+        if self._colqwen is None:
+            from src.rerank.colqwen import ColQwen2Service
+
+            self._colqwen = ColQwen2Service()
+
+        return self._colqwen
 
     def index_existing_pages(self) -> Dict[str, Any]:
         pages = self.store.all_page_rows()
         updated_rows: List[Dict[str, Any]] = []
+        colqwen = self._colqwen_service()
 
         for page in pages:
             if page.get("visual_status") == "embedded":
@@ -21,8 +29,8 @@ class VisualIndexingService:
 
             image_path = page["image_path"]
             print(f"Embedding visual for page {page['id']} at {image_path}")
-            visual_vector = self.colqwen.embed_page_image(image_path)
-
+            visual_vector = colqwen.embed_page_image(image_path)
+            print("visual vector dim:", len(visual_vector))
             updated_rows.append(
                 {
                     "id": page["id"],
@@ -38,14 +46,37 @@ class VisualIndexingService:
             )
 
         if updated_rows:
-            # easiest dev-time approach: recreate page table if you prefer
-            # but for now append updated versions as new rows is wrong.
-            # so use delete/recreate pattern during milestone 4.
             self._replace_page_table(updated_rows, pages)
 
         return {
             "status": "embedded",
             "updated_pages": len(updated_rows),
+        }
+
+    def search(self, query: str, top_k: int = 5) -> Dict[str, Any]:
+        colqwen = self._colqwen_service()
+        query_vec = colqwen.embed_query(query)
+        hits = self.store.page_vector_search(query_vec, top_k=top_k)
+        scored = colqwen.score_query_to_pages(query, hits)
+
+        response = []
+        for row in scored[:top_k]:
+            response.append(
+                {
+                    "id": row["id"],
+                    "doc_id": row["doc_id"],
+                    "page_number": row["page_number"],
+                    "image_path": row["image_path"],
+                    "visual_status": row["visual_status"],
+                    "visual_score": row["visual_score"],
+                    "page_text_preview": row.get("page_text_preview", ""),
+                }
+            )
+
+        return {
+            "query": query,
+            "count": len(response),
+            "results": response,
         }
 
     def _replace_page_table(
@@ -65,4 +96,8 @@ class VisualIndexingService:
         except Exception:
             pass
 
-        db.create_table(name, data=list(merged.values()), schema=self.store._page_schema())
+        db.create_table(
+            name,
+            data=list(merged.values()),
+            schema=self.store._page_schema(),
+        )

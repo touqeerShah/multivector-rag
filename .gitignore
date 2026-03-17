@@ -208,3 +208,9 @@ __marimo__/
 
 .venv
 data
+
+external
+.venv-colbert
+.venv-colpali
+colpali-env
+colbert-env

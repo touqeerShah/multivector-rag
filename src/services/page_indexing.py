@@ -52,7 +52,7 @@ class PageIndexingService:
                     "image_path": page["image_path"],
                     "markdown": page.get("markdown", ""),
                     "page_text_preview": preview,
-                    "visual_vector": [0.0] * 128,  # placeholder for milestone 3
+                    "visual_vector": [0.0] * 128,
                     "visual_status": "placeholder",
                 }
             )

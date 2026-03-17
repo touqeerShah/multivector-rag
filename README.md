@@ -1,163 +1,224 @@
-# multivector-ragPhase 0: what we are building
+# Multivector RAG (Retrieval-Augmented Generation)
 
-End-state flow:
+## ✅ Project Overview
+This repository implements a **hybrid multi-vector retrieval pipeline** for PDF documents, combining:
 
-User query
-  -> LangGraph router
-  -> Stage 1 candidate retrieval
-       - BM25 over extracted text
-       - dense text retrieval
-       - MUVERA/FDE proxy retrieval for multivectors
-  -> Stage 2 reranking
-       - ColBERT for text chunks
-       - ColQwen2 for page-image candidates
-  -> Context packer
-  -> Answer generation
-  -> Citations + metrics
+- **Text retrieval** (BM25 + dense embeddings)
+- **Visual retrieval** (page images + multivector embeddings)
+- **Reranking** (ColBERT for text, ColQwen2 for page images)
+- **Answer generation** with citations and metrics
 
-For PDFs we will store two views of the same source:
+The end goal is a system that can answer queries using both **textual content** and **visual layout/context** from PDFs.
 
-text view
-extracted text / OCR / chunks
+---
 
-visual page view
-rendered page image + page-level multivectors
+## 🔍 Architecture (End-to-End Flow)
 
-That gives you hybrid and visual retrieval without forcing every query through the expensive path.
+1. **User query**
+2. **LangGraph router** selects retrieval paths
+3. **Stage 1 – Candidate retrieval**
+   - BM25 over extracted text chunks
+   - Dense text retrieval
+   - MUVERA/FDE proxy retrieval for multi-vector page embeddings
+4. **Stage 2 – Reranking**
+   - ColBERT for text chunk reranking
+   - ColQwen2 for page-image candidate reranking
+5. **Context packer** (merges retrieval results)
+6. **Answer generation** (LLM prompt with context)
+7. **Citations + metrics**
 
-uv add fastapi uvicorn pydantic pydantic-settings
-uv add langgraph langchain
-uv add lancedb pyarrow tantivy
-uv add pymupdf pillow
-uv add rank-bm25 numpy scipy pandas
-uv add transformers torch
-uv add pytest httpx
-uv add pillow pyarrow
-uv add colpali-engine transformers
+---
 
-uv run uvicorn src.main:app --reload
+## 🧱 PDF Data Model (Two Views)
 
-curl -X POST "http://127.0.0.1:8000/upload" \
+To support hybrid retrieval, PDFs are stored in two parallel views:
+
+### 1) Text View
+- Extracted text
+- OCR output
+- Chunked text segments (for BM25 / dense retrieval)
+
+### 2) Visual Page View
+- Rendered page images
+- Page-level multivector embeddings (ColQwen2)
+
+This allows covering both **pure text search** and **visual/graphical retrieval** without forcing all queries through expensive visual pipelines.
+
+---
+
+## 🚀 Quick Start (Local Development)
+
+### 1) Create and activate Python environment
+```bash
+uv python install 3.10
+uv venv --python 3.10 .venv-colbert
+source .venv-colbert/bin/activate
+
+source .venv-colbert/bin/activate
+uv sync --project colbert-env
+deactivate
+
+source .venv-colpali/bin/activate
+uv sync --project colpali-env
+deactivate
+
+python -m uvicorn src.main_colbert:app --reload
+```
+
+### 2) Install dependencies
+```bash
+uv sync --project colbert-env
+uv sync --project colpali-env
+mkdir -p external
+git clone https://github.com/sionic-ai/muvera-py.git external/muvera-py
+```
+
+Do not install `colbert-ai` and `colpali-engine` into the same environment. `colpali-engine` requires `transformers>=5`, while the official ColBERT path in this repo needs the dedicated `colbert-env` project.
+
+### 3) Run the API server
+```bash
+uv run --project colbert-env uvicorn src.main_colbert:app --reload
+uv run --project colpali-env uvicorn src.main_colpali:app --reload
+
+source .venv-colbert/bin/activate
+python -m uvicorn src.main_colbert:app --reload
+
+source .venv-colpali/bin/activate
+python -m uvicorn src.main_colpali:app --reload
+```
+
+`src.main_colbert:app` includes the text endpoints and the official ColBERT experimental routes. `src.main_colpali:app` includes the text endpoints plus the visual endpoints, and only loads the visual model when a visual endpoint is called.
+
+`src.main:app` is kept as a text-only compatibility alias to `src.main_colbert:app`.
+
+For ColBERT endpoints, do not use `uv run uvicorn src.main:app --reload` from the repository root. That command resolves the root project dependency set and can pull in `transformers>=5`, which breaks `colbert-ai`.
+
+---
+
+## 🧪 Basic API Usage
+
+### Upload / Ingest a PDF
+```bash
+curl -X POST "http://127.0.0.1:8000/ingest/pdf" \
   -F "file=@$HOME/Downloads/test-tile.pdf"
+```
 
+### Search (text retrieval)
+```bash
 curl --get "http://127.0.0.1:8000/search" \
   --data-urlencode "q=prompt" \
   --data-urlencode "top_k=5" | python -m json.tool
+```
 
-
-10) Expected flow now
-Step A
-
-Ingest PDF pages:
-
-curl -X POST "http://127.0.0.1:8000/ingest/pdf" \
-  -F "file=@$HOME/Downloads/test-tile.pdf"
-Step B
-
-Check placeholder page rows:
-
-curl "http://127.0.0.1:8000/debug/pages" | python -m json.tool
-Step C
-
-Embed page images with ColQwen2:
-
+### Visual Search (page images + ColQwen2)
+```bash
 curl -X POST "http://127.0.0.1:8000/visual/embed-pages" | python -m json.tool
-Step D
-
-Search visually:
 
 curl --get "http://127.0.0.1:8000/visual/search" \
   --data-urlencode "q=prompt" \
   --data-urlencode "top_k=5" | python -m json.tool
+```
+
+### Debug: Inspect Page Records
+```bash
+curl "http://127.0.0.1:8000/debug/pages" | python -m json.tool
 
 
-Here is the actual order.
+```
 
-Milestone 1
 
-Get this working:
+Step 10: what to run
 
-uv project
+After you already uploaded and indexed documents into LanceDB, run:
 
-FastAPI /health
+curl -X POST "http://127.0.0.1:8000/experimental/colbert/reindex" | python -m json.tool
 
-PDF extraction to text + page images
+Or start it in the background and poll progress:
 
-tests
+curl -X POST "http://127.0.0.1:8000/experimental/colbert/reindex/background" | python -m json.tool
 
-Milestone 2
+curl "http://127.0.0.1:8000/experimental/colbert/reindex/status" | python -m json.tool
 
-Add baseline retrieval:
+Then compare:
+
+curl --get "http://127.0.0.1:8000/experimental/search" \
+  --data-urlencode "q=tile" \
+  --data-urlencode "top_k=5" | python -m json.tool
+
+That gives you:
 
 BM25
 
-dense text retrieval
+dense
 
-hybrid RRF
+hybrid
 
-one /search endpoint
+real ColBERT retrieval
 
-Milestone 3
+using the official ColBERT index/search APIs.
+---
 
-Store page image records:
+## 🧭 Milestones (Roadmap)
 
-page metadata
+### Milestone 1 – Core Ingestion + API
+- ✅ FastAPI running with `/health`
+- ✅ PDF extraction → text + page images
+- ✅ Basic test coverage
 
-page image path
+### Milestone 2 – Baseline Retrieval
+- BM25 retrieval (text)
+- Dense retrieval (text)
+- Hybrid RRF fusion
+- Single `/search` endpoint
 
-placeholder visual embeddings
+### Milestone 3 – Visual Page Store
+- Store page metadata (page number, PDF reference, etc.)
+- Store page image paths
+- Store placeholder visual embeddings
+- One `/ingest/pdf` endpoint
 
-one /ingest/pdf endpoint
+### Milestone 4 – ColQwen2 Embeddings (Visual Retrieval)
+- Query embeddings (ColQwen2)
+- Page-image embeddings (ColQwen2)
+- Page-level candidate scoring
 
-Milestone 4
+> **Design note:** For now, we do **not** store full multi-vectors in LanceDB. Instead:
+> - Pool ColQwen2 page embeddings into a single page vector
+> - Pool ColQwen2 query embeddings into one vector
+> - Use page-level vector search for first-stage retrieval
+>
+> This enables real ColQwen2 retrieval without full late interaction—while leaving a clean path to full multi-vector scoring later.
 
-Add ColQwen2 embedding pipeline:
+### Milestone 5 – ColBERT Reranking (Text)
+- Rerank top chunks using ColBERT (late interaction)
+- Compare baseline vs. reranked results
 
-query embedding
+> Recommended approach:
+> - Start with reranking only (no full ColBERT index)
+> - Rerank top 20–50 chunks (fast and easy)
+> - Provides immediate quality improvement with minimal engineering overhead
 
-page-image embedding
+---
 
-page candidate scoring
+## 📌 Notes & Tips
+- The system uses a **hybrid retrieval stack** (text + visual) to avoid forcing every query through the expensive visual pipeline.
+- The routing logic is handled by **LangGraph** to decide which retrieval paths to run.
 
-6) Milestone 4: add ColQwen2 pipeline
+---
 
-For ColQwen2 today, the practical path is to use colpali-engine. The official ColQwen2 model card states the model produces ColBERT-style multi-vector embeddings for text and images, and the current usage notes point to colpali-engine for inference.
+## ✅ Next Steps
+- Make sure `uvicorn` is running
+- Upload a PDF with `/ingest/pdf`
+- Run `/search` and `/visual/search`
+- Inspect `/debug/pages` to verify ingestion
 
-Important design choice
+---
 
-For milestone 4, do not try to store full multi-vectors in LanceDB yet.
+## 📄 References
+- ColQwen2 via `colpali-engine` (multi-vector embeddings)
+- ColBERT reranking (late interaction)
+- LanceDB (vector store + retrieval)
 
-Instead:
-
-compute ColQwen2 page embeddings
-
-pool them into one page-level vector for candidate retrieval
-
-compute ColQwen2 query embeddings
-
-pool them into one query vector
-
-use page-level vector search for first-stage candidate selection
-
-This is not full late interaction yet, but it gives you:
-
-real ColQwen2 image encoding
-
-real ColQwen2 query encoding
-
-real page candidate scoring
-
-a clean bridge to later full multi-vector scoring
-
-Milestone 5
-
-Add ColBERT reranking:
-
-rerank top text chunks
-
-compare baseline vs reranked
-
-Milestone 6
 
 Add MUVERA proxy stage:
 
@@ -166,6 +227,81 @@ plug FDE/proxy encoding behind MuveraProxyIndex
 use it only for candidate generation
 
 keep ColBERT/ColQwen2 for final rerank
+
+Important design decision
+
+Do not try to store raw ColBERT token embeddings inside LanceDB first.
+
+For your first real test:
+
+store muvera_vector in LanceDB
+
+keep colbert_vectors on disk as files keyed by chunk id
+
+Why:
+
+LanceDB is good for single-vector retrieval
+
+ColBERT multivectors are variable-length token embeddings
+
+storing them as sidecar .npy or .pt files is simpler for experimentation
+
+So a good storage layout is:
+
+data/
+  lancedb/
+  colbert_vectors/
+    <chunk_id>.pt
+
+Then:
+
+MUVERA retrieves candidate chunk IDs from LanceDB
+
+ColBERT reranker loads the .pt token embeddings for those candidate IDs
+
+scores them against the query token embeddings
+
+That gives you the real algorithmic behavior without fighting the database.
+
+Real Milestone 6 flow
+Ingestion
+
+For each chunk:
+
+compute dense vector
+
+compute ColBERT token embeddings
+
+save token embeddings to disk
+
+compute MUVERA FDE from those token embeddings
+
+store row in LanceDB with:
+
+id
+
+chunk_text
+
+vector
+
+muvera_vector
+
+metadata
+
+Search
+
+BM25 hits
+
+dense hits
+
+MUVERA hits from muvera_vector
+
+union candidates
+
+ColBERT rerank candidates using saved token embeddings
+
+return final ranked list
+
 
 Milestone 7
 
@@ -228,3 +364,21 @@ add logs and debug payloads
 start evaluation dataset
 
 That gets you a working skeleton without hiding the architecture.
+
+
+
+oncrete target architecture
+User query
+  -> SearchService
+      -> BM25
+      -> dense
+      -> hybrid RRF
+      -> MUVERA proxy candidates (later)
+      -> ColBERTReranker
+      -> ColQwen2 visual reranker (for page queries)
+  -> AnswerService
+      -> prompt builder
+      -> grounded answer
+      -> citations
+
+  

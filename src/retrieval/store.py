@@ -9,6 +9,10 @@ import pyarrow as pa
 from src.core.config import settings
 
 
+TEXT_VECTOR_DIM = 384
+VISUAL_VECTOR_DIM = 128  # change this after checking real ColQwen2 pooled vector length
+
+
 class RetrievalStore:
     def __init__(
         self,
@@ -39,7 +43,7 @@ class RetrievalStore:
                 pa.field("section_level", pa.int32()),
                 pa.field("chunk_text", pa.string()),
                 pa.field("image_path", pa.string()),
-                pa.field("vector", pa.list_(pa.float32(), 384)),
+                pa.field("vector", pa.list_(pa.float32(), TEXT_VECTOR_DIM)),
             ]
         )
 
@@ -53,7 +57,7 @@ class RetrievalStore:
                 pa.field("image_path", pa.string()),
                 pa.field("markdown", pa.string()),
                 pa.field("page_text_preview", pa.string()),
-                pa.field("visual_vector", pa.list_(pa.float32(), 128)),
+                pa.field("visual_vector", pa.list_(pa.float32(), VISUAL_VECTOR_DIM)),
                 pa.field("visual_status", pa.string()),
             ]
         )
@@ -76,7 +80,7 @@ class RetrievalStore:
                         "section_level": 0,
                         "chunk_text": "init",
                         "image_path": "",
-                        "vector": [0.0] * 384,
+                        "vector": [0.0] * TEXT_VECTOR_DIM,
                     }
                 ],
                 schema=self._text_schema(),
@@ -97,7 +101,7 @@ class RetrievalStore:
                         "image_path": "",
                         "markdown": "",
                         "page_text_preview": "",
-                        "visual_vector": [0.0] * 128,
+                        "visual_vector": [0.0] * VISUAL_VECTOR_DIM,
                         "visual_status": "seed",
                     }
                 ],

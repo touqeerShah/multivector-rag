@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 from typing import List, Dict, Any
-from pathlib import Path
 
 import torch
 from PIL import Image
-
-from colpali_engine.models import ColQwen2, ColQwen2Processor
 
 
 class ColQwen2Service:
@@ -15,6 +12,15 @@ class ColQwen2Service:
         model_name: str = "vidore/colqwen2-v1.0",
         device: str | None = None,
     ):
+        # lazy import so ColBERT-only env can still boot
+        try:
+            from colpali_engine.models import ColQwen2, ColQwen2Processor
+        except ModuleNotFoundError as e:
+            raise RuntimeError(
+                "colpali_engine is not installed in this environment. "
+                "Use the ColPali environment for visual retrieval."
+            ) from e
+
         self.model_name = model_name
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -22,8 +28,8 @@ class ColQwen2Service:
             model_name,
             torch_dtype=torch.bfloat16 if self.device == "cuda" else torch.float32,
         ).eval()
-
         self.model.to(self.device)
+
         self.processor = ColQwen2Processor.from_pretrained(model_name)
 
     def embed_query(self, query: str) -> List[float]:
@@ -59,10 +65,6 @@ class ColQwen2Service:
         return scored
 
     def _pool_embedding(self, embedding_tensor) -> List[float]:
-        """
-        ColQwen2 returns multi-vector embeddings.
-        For milestone 4, pool to one dense vector for candidate retrieval.
-        """
         if embedding_tensor.dim() == 2:
             pooled = embedding_tensor.mean(dim=0)
         else:
