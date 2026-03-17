@@ -59,7 +59,6 @@ uv sync --project colbert-env
 deactivate
 
 source colpali-env/.venv/bin/activate
-
 uv sync --project colpali-env
 deactivate
 
@@ -111,6 +110,14 @@ curl --get "http://127.0.0.1:8000/search" \
   --data-urlencode "top_k=5" | python -m json.tool
 ```
 
+### Answer With Citations
+```bash
+curl --get "http://127.0.0.1:8000/answer" \
+  --data-urlencode "q=what is the termination notice period?" \
+  --data-urlencode "top_k=5" \
+  --data-urlencode "evidence_k=3" | python -m json.tool
+```
+
 ### Visual Search (page images + ColQwen2)
 ```bash
 curl -X POST "http://127.0.0.1:8000/visual/embed-pages" | python -m json.tool
@@ -132,18 +139,18 @@ Step 10: what to run
 
 After you already uploaded and indexed documents into LanceDB, run:
 
-curl -X POST "http://127.0.0.1:8000/experimental/colbert/reindex" | python -m json.tool
+curl -X POST "http://127.0.0.1:8000/experimental/colbert/reindex" | python3 -m json.tool
 
 Or start it in the background and poll progress:
 
-curl -X POST "http://127.0.0.1:8000/experimental/colbert/reindex/background" | python -m json.tool
+curl -X POST "http://127.0.0.1:8000/experimental/colbert/reindex/background" | python3 -m json.tool
 
-curl "http://127.0.0.1:8000/experimental/colbert/reindex/status" | python -m json.tool
+curl "http://127.0.0.1:8000/experimental/colbert/reindex/status" | python3 -m json.tool
 
 Then compare:
 
 curl --get "http://127.0.0.1:8000/experimental/search" \
-  --data-urlencode "q=tile" \
+  --data-urlencode "q=signatures" \
   --data-urlencode "top_k=5" | python -m json.tool
 
 That gives you:

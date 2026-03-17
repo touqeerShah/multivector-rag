@@ -6,6 +6,7 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from src.core.config import settings
 from src.retrieval.dense import DenseEmbedder
+from src.services.answer_service import AnswerService
 from src.services.indexing import IndexingService
 from src.services.search_service import SearchService
 
@@ -13,6 +14,7 @@ from src.services.search_service import SearchService
 _embedder = None
 _indexing_service = None
 _search_service = None
+_answer_service = None
 _experimental_text_indexing_service = None
 _experimental_search_service = None
 
@@ -42,6 +44,15 @@ def _get_search_service():
         _search_service = SearchService(_get_embedder())
 
     return _search_service
+
+
+def _get_answer_service():
+    global _answer_service
+
+    if _answer_service is None:
+        _answer_service = AnswerService(_get_search_service())
+
+    return _answer_service
 
 
 def _get_experimental_text_indexing_service():
@@ -102,6 +113,15 @@ def build_text_router(include_official_colbert: bool = False) -> APIRouter:
     ):
         search_service = _get_search_service()
         return search_service.search(query=q, top_k=top_k)
+
+    @router.get("/answer")
+    def answer(
+        q: str = Query(..., min_length=1),
+        top_k: int = Query(10, ge=1, le=50),
+        evidence_k: int = Query(3, ge=1, le=10),
+    ):
+        answer_service = _get_answer_service()
+        return answer_service.answer(query=q, top_k=top_k, evidence_k=evidence_k)
 
     @router.get("/debug/rows")
     def debug_rows(limit: int = 5):

@@ -11,6 +11,7 @@ def test_main_colbert_exposes_text_and_experimental_routes():
 
     assert "/health" in paths
     assert "/search" in paths
+    assert "/answer" in paths
     assert "/experimental/search" in paths
     assert "/experimental/colbert/reindex" in paths
     assert "/experimental/colbert/reindex/background" in paths
@@ -24,6 +25,7 @@ def test_main_colpali_exposes_text_and_visual_routes():
 
     assert "/health" in paths
     assert "/search" in paths
+    assert "/answer" in paths
     assert "/visual/search" in paths
     assert "/visual/embed-pages" in paths
     assert "/experimental/search" not in paths

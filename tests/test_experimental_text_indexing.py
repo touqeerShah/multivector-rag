@@ -14,11 +14,13 @@ def test_rebuild_colbert_index_updates_status_and_logs():
         "collection_tsv": "data/colbert/collection.tsv",
         "pid_mapping_json": "data/colbert/pid_mapping.json",
     }
-    service.colbert.build_index = lambda collection_tsv_path, overwrite, log_fn=None: {
+    service.colbert.build_index = (
+        lambda collection_tsv_path, overwrite, log_fn=None, num_rows=None: {
         "status": "indexed",
         "collection_tsv": collection_tsv_path,
         "index_name": "local_index",
-    }
+        }
+    )
 
     result = service.rebuild_colbert_index(overwrite=True)
     status = service.get_rebuild_status()

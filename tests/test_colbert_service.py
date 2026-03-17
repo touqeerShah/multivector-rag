@@ -42,3 +42,23 @@ def test_safe_partition_count_caps_small_corpora():
     )
 
     assert safe == 8
+
+
+def test_choose_partitions_prefers_tiny_values_for_small_corpora():
+    chosen = OfficialColBERTService._choose_partitions(
+        num_rows=3,
+        est_embeddings=9,
+        max_partitions=128,
+    )
+
+    assert chosen == 1
+
+
+def test_choose_partitions_scales_gradually_for_medium_corpora():
+    chosen = OfficialColBERTService._choose_partitions(
+        num_rows=400,
+        est_embeddings=6000,
+        max_partitions=128,
+    )
+
+    assert chosen == 8

@@ -83,11 +83,57 @@ class OfficialColBERTService:
 
         return power_of_two
 
+    @staticmethod
+    def _choose_partitions(
+        num_rows: int | None,
+        est_embeddings: int | None,
+        max_partitions: int,
+    ) -> int:
+        row_based = max_partitions
+        if num_rows is not None:
+            if num_rows <= 5:
+                row_based = 1
+            elif num_rows <= 20:
+                row_based = 2
+            elif num_rows <= 100:
+                row_based = 4
+            elif num_rows <= 500:
+                row_based = 8
+            elif num_rows <= 2000:
+                row_based = 16
+            elif num_rows <= 10000:
+                row_based = 32
+            else:
+                row_based = 64
+
+        embedding_based = max_partitions
+        if est_embeddings is not None:
+            if est_embeddings < 32:
+                embedding_based = 1
+            elif est_embeddings < 128:
+                embedding_based = 2
+            elif est_embeddings < 512:
+                embedding_based = 4
+            elif est_embeddings < 2000:
+                embedding_based = 8
+            elif est_embeddings < 8000:
+                embedding_based = 16
+            elif est_embeddings < 32000:
+                embedding_based = 32
+            elif est_embeddings < 128000:
+                embedding_based = 64
+            else:
+                embedding_based = 128
+
+        chosen = min(row_based, embedding_based, max_partitions)
+        return max(1, chosen)
+
     def build_index(
         self,
         collection_tsv_path: str,
         overwrite: bool = False,
         log_fn=None,
+        num_rows: int | None = None,
     ) -> Dict[str, Any]:
         """Build a ColBERT index, calling log_fn(msg) at each major phase."""
         ensure_colbert_runtime_compatible()
@@ -115,6 +161,7 @@ class OfficialColBERTService:
         original_train = CollectionIndexer.train
         original_index = CollectionIndexer.index
         original_finalize = CollectionIndexer.finalize
+        selected = {"requested": None, "chosen": None, "sample_embeddings": None}
 
         def patched_setup(indexer_self):
             _log("[Phase 1/4] Setup: sampling passages and estimating corpus size…")
@@ -124,21 +171,51 @@ class OfficialColBERTService:
             if hasattr(sample_embeddings, "item"):
                 sample_embeddings = int(sample_embeddings.item())
 
+            est_embeddings = getattr(indexer_self, "num_embeddings_est", None)
+            if est_embeddings not in (None, "?"):
+                est_embeddings = int(est_embeddings)
+
+            requested = getattr(indexer_self, "num_partitions", 1)
+            heuristic_partitions = self._choose_partitions(
+                num_rows=num_rows,
+                est_embeddings=est_embeddings if isinstance(est_embeddings, int) else None,
+                max_partitions=self.max_partitions,
+            )
+
+            _log(
+                "Dynamic partition selection: "
+                f"rows={num_rows if num_rows is not None else '?'}, "
+                f"estimated_embeddings={est_embeddings if est_embeddings is not None else '?'}, "
+                f"heuristic_partitions={heuristic_partitions}."
+            )
+
             if isinstance(sample_embeddings, int) and sample_embeddings > 0:
-                requested = getattr(indexer_self, "num_partitions", 1)
                 safe_partitions = self._safe_partition_count(
-                    requested=requested,
+                    requested=heuristic_partitions,
                     sample_embeddings=sample_embeddings,
                     max_partitions=self.max_partitions,
                 )
+
+                selected["requested"] = requested
+                selected["chosen"] = safe_partitions
+                selected["sample_embeddings"] = sample_embeddings
 
                 if safe_partitions != requested:
                     indexer_self.num_partitions = safe_partitions
                     indexer_self._save_plan()
                     _log(
-                        "[Phase 1/4] Setup adjusted for small corpus: "
+                        "[Phase 1/4] Setup adjusted for corpus size: "
                         f"sample_embeddings={sample_embeddings}, "
-                        f"requested_partitions={requested}, "
+                        f"default_partitions={requested}, "
+                        f"heuristic_partitions={heuristic_partitions}, "
+                        f"using_partitions={safe_partitions}."
+                    )
+                else:
+                    _log(
+                        "[Phase 1/4] Setup confirmed partition count: "
+                        f"sample_embeddings={sample_embeddings}, "
+                        f"default_partitions={requested}, "
+                        f"heuristic_partitions={heuristic_partitions}, "
                         f"using_partitions={safe_partitions}."
                     )
 
@@ -219,6 +296,9 @@ class OfficialColBERTService:
             "collection_tsv": collection_tsv_path,
             "index_name": self.index_name,
             "max_partitions": self.max_partitions,
+            "num_partitions": selected["chosen"],
+            "default_num_partitions": selected["requested"],
+            "sample_embeddings": selected["sample_embeddings"],
         }
 
     def search(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:

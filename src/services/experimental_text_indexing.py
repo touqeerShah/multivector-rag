@@ -90,6 +90,7 @@ class ExperimentalTextIndexingService:
                 collection_tsv_path=export_result["collection_tsv"],
                 overwrite=overwrite,
                 log_fn=self._append_log,
+                num_rows=len(rows),
             )
         finally:
             done_event.set()   # always stop the watcher
