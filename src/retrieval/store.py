@@ -119,6 +119,9 @@ class RetrievalStore:
         if cleaned_rows:
             self._text_table().add(cleaned_rows)
 
+    def add_rows(self, rows: List[Dict[str, Any]]) -> None:
+        self.add_text_rows(rows)
+
     def add_page_rows(self, rows: List[Dict[str, Any]]) -> None:
         cleaned_rows = [r for r in rows if r.get("id") != "init"]
         if cleaned_rows:
@@ -127,6 +130,9 @@ class RetrievalStore:
     def all_text_rows(self) -> List[Dict[str, Any]]:
         rows = self._text_table().to_pandas().to_dict(orient="records")
         return self._clean_rows(rows)
+
+    def all_rows(self) -> List[Dict[str, Any]]:
+        return self.all_text_rows()
 
     def all_page_rows(self) -> List[Dict[str, Any]]:
         rows = self._page_table().to_pandas().to_dict(orient="records")

@@ -12,7 +12,7 @@ from src.retrieval.bm25 import BM25Index
 
 
 class IndexingService:
-    def __init__(self,embedder):
+    def __init__(self, embedder):
         self.embedder = embedder
         self.store = RetrievalStore()
         self.bm25 = BM25Index()
@@ -41,7 +41,7 @@ class IndexingService:
         else:
             raise ValueError(f"Unsupported file type: {suffix}")
 
-        self.store.add_rows(rows)
+        self.store.add_text_rows(rows)
         self.rebuild_bm25()
 
         return {
@@ -51,7 +51,7 @@ class IndexingService:
         }
 
     def rebuild_bm25(self) -> None:
-        rows = self.store.all_rows()
+        rows = self.store.all_text_rows()
         self.bm25.build(rows)
 
     def _build_rows_from_text(

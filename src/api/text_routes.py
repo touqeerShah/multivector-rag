@@ -106,7 +106,7 @@ def build_text_router(include_official_colbert: bool = False) -> APIRouter:
     @router.get("/debug/rows")
     def debug_rows(limit: int = 5):
         search_service = _get_search_service()
-        rows = search_service.store.all_rows()
+        rows = search_service.store.all_text_rows()
 
         sample = []
         for row in rows[:limit]:

@@ -30,4 +30,4 @@ def test_colbert_runtime_rejects_transformers_5_stack():
 
     message = str(exc_info.value)
     assert "transformers=5.3.0" in message
-    assert "uv run --project colbert-env uvicorn src.main:app --reload" in message
+    assert "dedicated ColBERT project environment" in message
