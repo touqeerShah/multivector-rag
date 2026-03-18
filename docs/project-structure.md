@@ -21,6 +21,9 @@ Both apps share the same project data directories, especially:
 - `data/processed`
 - `data/lancedb`
 - `data/colbert`
+- `data/muvera`
+- `data/muvera_real`
+- `data/colbert_vectors`
 
 That means you can ingest in one app and use the stored data in the other app.
 
@@ -141,6 +144,8 @@ Endpoints:
 - `GET /search`
 - `GET /answer`
 - `GET /debug/rows`
+- `POST /experimental/muvera/reindex`
+- `GET /experimental/muvera/search`
 
 ColBERT-only endpoints:
 
@@ -148,6 +153,8 @@ ColBERT-only endpoints:
 - `POST /experimental/colbert/reindex/background`
 - `GET /experimental/colbert/reindex/status`
 - `GET /experimental/search`
+- `POST /experimental/muvera/real/reindex`
+- `GET /experimental/muvera/real/search`
 
 Main dependencies:
 
@@ -155,15 +162,19 @@ Main dependencies:
 - `IndexingService`
 - `SearchService`
 - `AnswerService`
+- `ExperimentalMuveraService`
 - `ExperimentalTextIndexingService`
 - `ExperimentalSearchService`
+- `ExperimentalRealMuveraService`
 
 Connection summary:
 
 - upload -> indexing service -> retrieval store
 - search -> search service -> bm25 + dense + rerank
 - answer -> answer service -> search service
+- proxy MUVERA reindex -> dense mini-span multivectors -> MUVERA fixed vectors
 - experimental reindex -> export collection -> official ColBERT index build
+- real MUVERA reindex -> ColBERT multivectors -> MUVERA fixed vectors -> optional ColBERT rerank
 
 ### `src/api/visual_routes.py`
 
@@ -303,6 +314,44 @@ Used by:
 
 - `/experimental/search`
 
+### `src/services/experimental_muvera_service.py`
+
+- Experimental proxy MUVERA path.
+- Builds MUVERA vectors from dense mini-span embeddings rather than official ColBERT token embeddings.
+
+Pipeline:
+
+1. load text rows from LanceDB
+2. split each chunk into mini-spans
+3. embed those spans with the dense text embedder
+4. compress each document multivector with MUVERA
+5. save/search the compressed vectors with `MuveraStore`
+
+Used by:
+
+- `/experimental/muvera/reindex`
+- `/experimental/muvera/search`
+
+### `src/services/experimental_real_muvera_service.py`
+
+- Experimental real ColBERT-backed MUVERA path.
+- Uses official ColBERT document/query multivectors before MUVERA compression.
+
+Pipeline:
+
+1. load text rows from LanceDB
+2. encode each chunk with the ColBERT checkpoint
+3. save raw ColBERT multivectors to disk
+4. compress each multivector with MUVERA
+5. retrieve candidates from MUVERA
+6. rerank those candidates with real ColBERT MaxSim
+7. compare against proxy MUVERA and normal dense/hybrid search
+
+Used by:
+
+- `/experimental/muvera/real/reindex`
+- `/experimental/muvera/real/search`
+
 ---
 
 ## Retrieval Layer
@@ -399,13 +448,18 @@ Important behavior:
 
 - Experimental MUVERA fixed-dimensional encoding wrapper.
 - Imports local code from `external/muvera-py`.
-- Not part of the main HTTP path yet.
+- Now used by both experimental MUVERA HTTP paths:
+  - proxy MUVERA
+  - real ColBERT-backed MUVERA
 
 ### `src/retrieval/muvera_store.py`
 
 - Experimental storage/search layer for MUVERA vectors.
 - Saves vectors to `.npy` and IDs to `.json`.
-- Not yet wired into the main API.
+- Now used by both experimental MUVERA HTTP paths.
+- Stores:
+  - `data/muvera/*` for proxy MUVERA
+  - `data/muvera_real/*` for real ColBERT-backed MUVERA
 
 ---
 
@@ -555,6 +609,14 @@ Current status:
 
 - Verifies ColBERT reindex status/log tracking.
 
+### `tests/test_experimental_muvera_service.py`
+
+- Verifies the proxy MUVERA reindex/search path.
+
+### `tests/test_experimental_real_muvera_service.py`
+
+- Verifies real ColBERT multivectors are saved and used for MUVERA retrieval + ColBERT rerank.
+
 ### `tests/test_indexing_service.py`
 
 - Verifies text indexing uses the correct store API.
@@ -576,10 +638,14 @@ Available paths:
 - `/search`
 - `/answer`
 - `/debug/rows`
+- `/experimental/muvera/reindex`
+- `/experimental/muvera/search`
 - `/experimental/colbert/reindex`
 - `/experimental/colbert/reindex/background`
 - `/experimental/colbert/reindex/status`
 - `/experimental/search`
+- `/experimental/muvera/real/reindex`
+- `/experimental/muvera/real/search`
 
 What happens on `/upload`:
 
@@ -616,6 +682,39 @@ What happens on `/experimental/colbert/reindex`:
 3. `CollectionExporter`
 4. `OfficialColBERTService.build_index()`
 5. ColBERT writes index under `experiments/local/indexes/local_index`
+
+What happens on `/experimental/muvera/reindex`:
+
+1. `text_routes.py`
+2. `ExperimentalMuveraService`
+3. load stored text rows
+4. split chunks into mini-spans
+5. embed spans with `DenseEmbedder`
+6. `MuveraEncoder`
+7. `MuveraStore`
+8. return proxy MUVERA index metadata
+
+What happens on `/experimental/muvera/real/reindex`:
+
+1. `text_routes.py`
+2. `ExperimentalRealMuveraService`
+3. load stored text rows
+4. encode docs with official ColBERT checkpoint
+5. save raw doc multivectors under `data/colbert_vectors`
+6. `MuveraEncoder`
+7. `MuveraStore`
+8. return real MUVERA index metadata
+
+What happens on `/experimental/muvera/real/search`:
+
+1. `text_routes.py`
+2. `ExperimentalRealMuveraService`
+3. encode query with official ColBERT
+4. retrieve MUVERA candidates
+5. load saved ColBERT multivectors
+6. rerank with ColBERT MaxSim
+7. compare against proxy MUVERA and dense/hybrid search
+8. return candidate and reranked results
 
 ## When running `src.main_colpali:app`
 
@@ -667,6 +766,8 @@ If you want one simple way to think about this repo:
 - `ingest/` prepares documents
 - `rerank/` improves ordering
 - `main_colbert.py` is the text + official ColBERT app
+- `experimental_muvera_service.py` is the proxy MUVERA experiment
+- `experimental_real_muvera_service.py` is the real ColBERT-backed MUVERA experiment
 - `main_colpali.py` is the text + visual app
 
 If you are debugging a request, start from the matching route file, then follow the service it calls, then follow the retrieval or ingest modules underneath it.

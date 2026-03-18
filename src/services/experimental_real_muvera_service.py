@@ -62,13 +62,7 @@ class ExperimentalRealMuveraService:
                 ],
             }
 
-        doc_multivectors = self._checkpoint_instance().docFromText(
-            texts,
-            bsize=batch_size,
-            keep_dims=False,
-            to_cpu=True,
-            showprogress=False,
-        )
+        doc_multivectors = self._document_multivectors(texts, batch_size=batch_size)
 
         doc_ids: List[str] = []
         fdes: List[np.ndarray] = []
@@ -205,7 +199,35 @@ class ExperimentalRealMuveraService:
         tensor = self._checkpoint_instance().queryFromText([query], to_cpu=True)
         return self._to_2d_tensor(tensor)
 
+    def _document_multivectors(self, texts: List[str], batch_size: int) -> List[torch.Tensor]:
+        raw = self._checkpoint_instance().docFromText(
+            texts,
+            bsize=batch_size,
+            keep_dims=False,
+            to_cpu=False,
+            showprogress=False,
+        )
+
+        if isinstance(raw, tuple):
+            raw = raw[0]
+
+        if isinstance(raw, torch.Tensor):
+            items = [raw[idx] for idx in range(raw.shape[0])]
+        else:
+            items = list(raw)
+
+        return [self._to_2d_tensor(item) for item in items]
+
     def _to_2d_tensor(self, tensor) -> torch.Tensor:
+        if isinstance(tensor, list):
+            if not tensor:
+                return torch.zeros((0, 128), dtype=torch.float32)
+            tensor = torch.stack(
+                [
+                    item if isinstance(item, torch.Tensor) else torch.tensor(item)
+                    for item in tensor
+                ]
+            )
         if isinstance(tensor, np.ndarray):
             tensor = torch.from_numpy(tensor)
         elif not isinstance(tensor, torch.Tensor):

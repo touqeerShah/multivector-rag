@@ -194,19 +194,19 @@ Start the ColBERT app:
 
 ```bash
 source .venv-colbert/bin/activate
-python -m uvicorn src.main_colbert:app --reload --port 8001
+python -m uvicorn src.main_colbert:app --reload --port 8000
 ```
 
 Build the real MUVERA index:
 
 ```bash
-curl -X POST "http://127.0.0.1:8001/experimental/muvera/real/reindex" | python -m json.tool
+curl -X POST "http://127.0.0.1:8000/experimental/muvera/real/reindex" | python3 -m json.tool
 ```
 
 Optional smaller build:
 
 ```bash
-curl -X POST "http://127.0.0.1:8001/experimental/muvera/real/reindex?top_docs=50&batch_size=8" | python -m json.tool
+curl -X POST "http://127.0.0.1:8000/experimental/muvera/real/reindex?top_docs=50&batch_size=8" | python -m json.tool
 ```
 
 Search:

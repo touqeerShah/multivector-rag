@@ -84,6 +84,24 @@ class StubMuveraStore:
         ][:top_k]
 
 
+class StubCheckpointListOutput:
+    def docFromText(self, docs, bsize=8, keep_dims=False, to_cpu=True, showprogress=False):
+        assert to_cpu is False
+        return [
+            [
+                torch.tensor([1.0, 0.0], dtype=torch.float32),
+                torch.tensor([0.5, 0.5], dtype=torch.float32),
+            ],
+            [
+                torch.tensor([0.0, 1.0], dtype=torch.float32),
+                torch.tensor([0.2, 0.8], dtype=torch.float32),
+            ],
+        ][: len(docs)]
+
+    def queryFromText(self, queries, to_cpu=True):
+        return torch.tensor([[[1.0, 0.0], [0.5, 0.5]]], dtype=torch.float32)
+
+
 def test_real_muvera_reindex_saves_colbert_multivectors(tmp_path):
     muvera_store = StubMuveraStore()
     service = ExperimentalRealMuveraService(
@@ -128,3 +146,22 @@ def test_real_muvera_search_returns_reranked_real_colbert_results(tmp_path):
     assert "dense" in result
     assert "hybrid" in result
     assert "vector" not in result["muvera_candidates"][0]
+
+
+def test_real_muvera_reindex_handles_list_output_from_colbert(tmp_path):
+    muvera_store = StubMuveraStore()
+    service = ExperimentalRealMuveraService(
+        search_service=StubSearchService(),
+        proxy_muvera_service=StubProxyMuveraService(),
+        store=StubStore(),
+        vector_dir=str(tmp_path / "colbert_vectors"),
+        checkpoint=StubCheckpointListOutput(),
+        muvera_encoder=StubMuveraEncoder(),
+        muvera_store=muvera_store,
+    )
+
+    result = service.rebuild_index(batch_size=2)
+
+    assert result["status"] == "indexed"
+    assert result["indexed_docs"] == 2
+    assert muvera_store.saved_ids == ["doc-1", "doc-2"]
