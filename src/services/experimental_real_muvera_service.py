@@ -141,8 +141,19 @@ class ExperimentalRealMuveraService:
         reranked = self._rerank_candidates(query_multivector, candidates[:rerank_k])
 
         baseline = self.search_service.search(query=query, top_k=comparison_top_k)
-        proxy = self.proxy_muvera_service.search(query=query, top_k=top_k)
-        proxy_hits = proxy.get("muvera", [])
+        notes = [
+            "This path uses real ColBERT document/query multivectors and reranks MUVERA candidates with MaxSim.",
+            "Compare this endpoint against /experimental/muvera/search to see the difference between proxy dense-span multivectors and real ColBERT multivectors.",
+        ]
+        proxy_hits: List[Dict[str, Any]] = []
+        try:
+            proxy = self.proxy_muvera_service.search(query=query, top_k=top_k)
+            proxy_hits = proxy.get("muvera", [])
+        except FileNotFoundError:
+            notes.append(
+                "Proxy MUVERA comparison is unavailable because the proxy index has not been built yet. Run POST /experimental/muvera/reindex if you want that comparison."
+            )
+
         dense = baseline.get("dense", [])
         hybrid = baseline.get("hybrid", [])
 
@@ -175,10 +186,7 @@ class ExperimentalRealMuveraService:
             "proxy_muvera": proxy_hits,
             "dense": dense,
             "hybrid": hybrid,
-            "notes": [
-                "This path uses real ColBERT document/query multivectors and reranks MUVERA candidates with MaxSim.",
-                "Compare this endpoint against /experimental/muvera/search to see the difference between proxy dense-span multivectors and real ColBERT multivectors.",
-            ],
+            "notes": notes,
         }
 
     def _checkpoint_instance(self) -> Checkpoint:

@@ -35,6 +35,11 @@ class StubSearchService:
         }
 
 
+class MissingProxyMuveraService:
+    def search(self, query: str, top_k: int = 10):
+        raise FileNotFoundError("proxy MUVERA index missing")
+
+
 class StubStore:
     def all_text_rows(self):
         return [
@@ -165,3 +170,23 @@ def test_real_muvera_reindex_handles_list_output_from_colbert(tmp_path):
     assert result["status"] == "indexed"
     assert result["indexed_docs"] == 2
     assert muvera_store.saved_ids == ["doc-1", "doc-2"]
+
+
+def test_real_muvera_search_still_works_without_proxy_index(tmp_path):
+    muvera_store = StubMuveraStore()
+    service = ExperimentalRealMuveraService(
+        search_service=StubSearchService(),
+        proxy_muvera_service=MissingProxyMuveraService(),
+        store=StubStore(),
+        vector_dir=str(tmp_path / "colbert_vectors"),
+        checkpoint=StubCheckpoint(),
+        muvera_encoder=StubMuveraEncoder(),
+        muvera_store=muvera_store,
+    )
+    service.rebuild_index(batch_size=2)
+
+    result = service.search(query="alpha question", top_k=2, rerank_k=2)
+
+    assert len(result["reranked"]) == 2
+    assert result["proxy_muvera"] == []
+    assert any("proxy index has not been built yet" in note for note in result["notes"])
