@@ -118,6 +118,24 @@ curl --get "http://127.0.0.1:8000/answer" \
   --data-urlencode "evidence_k=3" | python -m json.tool
 ```
 
+### Experimental MUVERA Proxy Search
+```bash
+curl -X POST "http://127.0.0.1:8000/experimental/muvera/reindex" \
+  --get --data-urlencode "max_subvectors_per_doc=8" | python -m json.tool
+
+curl --get "http://127.0.0.1:8000/experimental/muvera/search" \
+  --data-urlencode "q=what is the termination notice period?" \
+  --data-urlencode "top_k=5" | python -m json.tool
+```
+
+This experimental endpoint returns:
+
+- `muvera`: fixed-dimensional MUVERA proxy hits
+- `dense`: standard dense results from `/search`
+- `hybrid`: standard hybrid results from `/search`
+
+Use it to compare candidate ordering and overlap without returning raw vectors in the API response.
+
 ### Visual Search (page images + ColQwen2)
 ```bash
 curl -X POST "http://127.0.0.1:8000/visual/embed-pages" | python -m json.tool
@@ -390,3 +408,158 @@ User query
       -> citations
 
   
+
+curl -X POST "http://localhost:8000/upload" \
+  -F "file=@/home/ubuntu/1063effa-59cc-4df4-aeee-d2cf94f69178_en?filename=Blockchain_For_Beginners_A_EUBOF_Guide.pdf"
+
+curl -X POST "http://localhost:8000/ingest/pdf" \
+  -F "file=@/home/ubuntu/1063effa-59cc-4df4-aeee-d2cf94f69178_en?filename=Blockchain_For_Beginners_A_EUBOF_Guide.pdf"
+
+curl "http://localhost:8000/debug/pages" | python -m json.tool
+
+curl -X POST "http://localhost:8000/visual/embed-pages" | python3 -m json.tool
+
+curl --get "http://localhost:8000/visual/search" \
+  --data-urlencode "q=signatures" \
+  --data-urlencode "top_k=5" | python3 -m json.tool
+
+
+curl --get "http://127.0.0.1:8000/answer" \
+  --data-urlencode "q=what is the termination notice period?" \
+  --data-urlencode "top_k=5" \
+  --data-urlencode "evidence_k=3" | python -m json.tool
+
+
+curl -X POST "http://127.0.0.1:8000/experimental/muvera/reindex" \
+  --get --data-urlencode "max_subvectors_per_doc=8" | python -m json.tool
+
+curl --get "http://127.0.0.1:8000/experimental/muvera/search" \
+  --data-urlencode "q=what is the termination notice period?" \
+  --data-urlencode "top_k=5" | python -m json.tool
+
+
+
+
+
+Use this sequence.
+source .venv-colbert/bin/activate
+python -m uvicorn src.main_colbert:app --reload --port 8001
+
+**ColPali App**
+Run first:
+```bash
+source .venv-colpali/bin/activate
+python -m uvicorn src.main_colpali:app --reload --port 8000
+```
+
+Then call APIs in this order:
+```bash
+curl "http://127.0.0.1:8000/health" | python -m json.tool
+```
+
+```bash
+curl -X POST "http://127.0.0.1:8000/upload" \
+  -F "file=@/absolute/path/to/file.pdf" | python -m json.tool
+```
+
+```bash
+curl "http://127.0.0.1:8000/debug/rows?limit=5" | python -m json.tool
+```
+
+```bash
+curl --get "http://127.0.0.1:8000/search" \
+  --data-urlencode "q=your question" \
+  --data-urlencode "top_k=5" | python -m json.tool
+```
+
+```bash
+curl --get "http://127.0.0.1:8000/answer" \
+  --data-urlencode "q=your question" \
+  --data-urlencode "top_k=5" \
+  --data-urlencode "evidence_k=3" | python -m json.tool
+```
+
+For visual flow on the same PDF:
+```bash
+curl -X POST "http://127.0.0.1:8000/ingest/pdf" \
+  -F "file=@/absolute/path/to/file.pdf" | python -m json.tool
+```
+
+```bash
+curl "http://127.0.0.1:8000/debug/pages?limit=5" | python -m json.tool
+```
+
+```bash
+curl -X POST "http://127.0.0.1:8000/visual/embed-pages" | python -m json.tool
+```
+
+```bash
+curl --get "http://127.0.0.1:8000/visual/search" \
+  --data-urlencode "q=your visual question" \
+  --data-urlencode "top_k=5" | python -m json.tool
+```
+
+Optional experimental MUVERA proxy:
+```bash
+curl -X POST "http://127.0.0.1:8000/experimental/muvera/reindex" \
+  --get --data-urlencode "max_subvectors_per_doc=8" | python -m json.tool
+```
+
+```bash
+curl --get "http://127.0.0.1:8000/experimental/muvera/search" \
+  --data-urlencode "q=your question" \
+  --data-urlencode "top_k=5" | python -m json.tool
+```
+
+**ColBERT App**
+Run separately:
+```bash
+source .venv-colbert/bin/activate
+python -m uvicorn src.main_colbert:app --reload --port 8001
+```
+
+Then call:
+```bash
+curl -X POST "http://127.0.0.1:8001/experimental/colbert/reindex" | python -m json.tool
+```
+
+Or background mode:
+```bash
+curl -X POST "http://127.0.0.1:8001/experimental/colbert/reindex/background" | python -m json.tool
+```
+
+```bash
+curl "http://127.0.0.1:8001/experimental/colbert/reindex/status" | python -m json.tool
+```
+
+Then compare official ColBERT search:
+```bash
+curl --get "http://127.0.0.1:8001/experimental/search" \
+  --data-urlencode "q=your question" \
+  --data-urlencode "top_k=5" | python -m json.tool
+```
+
+curl -X POST "http://127.0.0.1:8001/experimental/muvera/real/reindex" | python -m json.tool
+curl --get "http://127.0.0.1:8001/experimental/muvera/real/search" \
+  --data-urlencode "q=your question" \
+  --data-urlencode "top_k=5" \
+  --data-urlencode "rerank_k=10" | python -m json.tool
+
+
+**Recommended Full End-to-End Order**
+1. Start `main_colpali` on `8000`
+2. `POST /upload`
+3. `GET /debug/rows`
+4. `GET /search`
+5. `GET /answer`
+6. `POST /ingest/pdf`
+7. `GET /debug/pages`
+8. `POST /visual/embed-pages`
+9. `GET /visual/search`
+10. Optional: `POST /experimental/muvera/reindex`
+11. Optional: `GET /experimental/muvera/search`
+12. Start `main_colbert` on `8001`
+13. `POST /experimental/colbert/reindex`
+14. `GET /experimental/search`
+
+If you want, I can turn this into one copy-paste bash script with your actual ports and file path placeholders.

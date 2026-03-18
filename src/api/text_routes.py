@@ -17,6 +17,8 @@ _search_service = None
 _answer_service = None
 _experimental_text_indexing_service = None
 _experimental_search_service = None
+_experimental_muvera_service = None
+_experimental_real_muvera_service = None
 
 
 def _get_embedder():
@@ -53,6 +55,36 @@ def _get_answer_service():
         _answer_service = AnswerService(_get_search_service())
 
     return _answer_service
+
+
+def _get_experimental_muvera_service():
+    global _experimental_muvera_service
+
+    if _experimental_muvera_service is None:
+        from src.services.experimental_muvera_service import ExperimentalMuveraService
+
+        _experimental_muvera_service = ExperimentalMuveraService(
+            embedder=_get_embedder(),
+            search_service=_get_search_service(),
+        )
+
+    return _experimental_muvera_service
+
+
+def _get_experimental_real_muvera_service():
+    global _experimental_real_muvera_service
+
+    if _experimental_real_muvera_service is None:
+        from src.services.experimental_real_muvera_service import (
+            ExperimentalRealMuveraService,
+        )
+
+        _experimental_real_muvera_service = ExperimentalRealMuveraService(
+            search_service=_get_search_service(),
+            proxy_muvera_service=_get_experimental_muvera_service(),
+        )
+
+    return _experimental_real_muvera_service
 
 
 def _get_experimental_text_indexing_service():
@@ -123,6 +155,26 @@ def build_text_router(include_official_colbert: bool = False) -> APIRouter:
         answer_service = _get_answer_service()
         return answer_service.answer(query=q, top_k=top_k, evidence_k=evidence_k)
 
+    @router.post("/experimental/muvera/reindex")
+    def rebuild_muvera(
+        max_subvectors_per_doc: int = Query(8, ge=1, le=32),
+    ):
+        return _get_experimental_muvera_service().rebuild_index(
+            max_subvectors_per_doc=max_subvectors_per_doc
+        )
+
+    @router.get("/experimental/muvera/search")
+    def experimental_muvera_search(
+        q: str = Query(..., min_length=1),
+        top_k: int = Query(10, ge=1, le=50),
+        max_query_subvectors: int = Query(6, ge=1, le=16),
+    ):
+        return _get_experimental_muvera_service().search(
+            query=q,
+            top_k=top_k,
+            max_query_subvectors=max_query_subvectors,
+        )
+
     @router.get("/debug/rows")
     def debug_rows(limit: int = 5):
         search_service = _get_search_service()
@@ -186,6 +238,34 @@ def build_text_router(include_official_colbert: bool = False) -> APIRouter:
             try:
                 return _get_experimental_search_service().search(
                     query=q, top_k=top_k
+                )
+            except ColBERTEnvironmentError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        @router.post("/experimental/muvera/real/reindex")
+        def rebuild_real_muvera(
+            top_docs: int | None = Query(None, ge=1),
+            batch_size: int = Query(8, ge=1, le=64),
+        ):
+            try:
+                return _get_experimental_real_muvera_service().rebuild_index(
+                    top_docs=top_docs,
+                    batch_size=batch_size,
+                )
+            except ColBERTEnvironmentError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        @router.get("/experimental/muvera/real/search")
+        def experimental_real_muvera_search(
+            q: str = Query(..., min_length=1),
+            top_k: int = Query(10, ge=1, le=50),
+            rerank_k: int = Query(10, ge=1, le=50),
+        ):
+            try:
+                return _get_experimental_real_muvera_service().search(
+                    query=q,
+                    top_k=top_k,
+                    rerank_k=rerank_k,
                 )
             except ColBERTEnvironmentError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
