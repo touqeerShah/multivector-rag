@@ -9,7 +9,10 @@ from src.services.experimental_text_indexing import ExperimentalTextIndexingServ
 def test_rebuild_colbert_index_updates_status_and_logs():
     service = ExperimentalTextIndexingService()
 
-    service.store.all_text_rows = lambda: [{"id": "row-1"}, {"id": "row-2"}]
+    service.store.all_text_rows = lambda: [
+        {"id": "row-1", "chunk_text": "The termination notice period is 30 days.", "section_heading": "Termination"},
+        {"id": "row-2", "chunk_text": "Renewal occurs automatically unless notice is given.", "section_heading": "Renewal"},
+    ]
     service.exporter.export_collection_tsv = lambda rows: {
         "collection_tsv": "data/colbert/collection.tsv",
         "pid_mapping_json": "data/colbert/pid_mapping.json",

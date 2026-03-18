@@ -26,13 +26,13 @@ class StubStore:
             {
                 "id": "doc-1",
                 "doc_id": "a",
-                "chunk_text": "alpha beta gamma",
+                "chunk_text": "Alpha beta gamma establishes the main obligation.",
                 "vector": [0.1, 0.2, 0.3],
             },
             {
                 "id": "doc-2",
                 "doc_id": "b",
-                "chunk_text": "delta epsilon zeta",
+                "chunk_text": "Delta epsilon zeta describes the renewal timeline.",
                 "vector": [0.4, 0.5, 0.6],
             },
         ]

@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 import numpy as np
 
 from src.retrieval.muvera_encoder import MuveraEncoder
+from src.retrieval.quality import filter_retrievable_rows
 from src.retrieval.muvera_store import MuveraStore
 from src.retrieval.store import RetrievalStore
 
@@ -29,7 +30,7 @@ class ExperimentalMuveraService:
         self,
         max_subvectors_per_doc: int = 8,
     ) -> Dict[str, Any]:
-        rows = self.store.all_text_rows()
+        rows = filter_retrievable_rows(self.store.all_text_rows())
         doc_ids: List[str] = []
         fdes: List[np.ndarray] = []
         subvectors_per_doc: List[int] = []
@@ -142,7 +143,7 @@ class ExperimentalMuveraService:
         return len(sample[0]) if sample else 0
 
     def _join_hits_with_metadata(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        row_map = {row["id"]: row for row in self.store.all_text_rows()}
+        row_map = {row["id"]: row for row in filter_retrievable_rows(self.store.all_text_rows())}
         joined = []
 
         for hit in hits:

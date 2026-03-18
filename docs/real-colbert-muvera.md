@@ -201,21 +201,34 @@ Build the real MUVERA index:
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/experimental/muvera/real/reindex" | python3 -m json.tool
+{
+    "status": "indexed",
+    "indexed_docs": 141,
+    "vector_dir": "data/colbert_vectors",
+    "muvera_vector_dim": 81920,
+    "avg_tokens_per_doc": 101.74468085106383,
+    "checkpoint": "colbert-ir/colbertv2.0",
+    "notes": [
+        "This index uses real ColBERT document multivectors saved to disk, then compresses them with MUVERA FDE.",
+        "Search candidates can be reranked with real ColBERT MaxSim using the saved .pt files."
+    ]
+}
 ```
 
 Optional smaller build:
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/experimental/muvera/real/reindex?top_docs=50&batch_size=8" | python -m json.tool
+curl -X POST "http://127.0.0.1:8000/experimental/muvera/real/reindex?top_docs=50&batch_size=8" | python3 -m json.tool
 ```
 
 Search:
 
 ```bash
-curl --get "http://127.0.0.1:8001/experimental/muvera/real/search" \
-  --data-urlencode "q=your question" \
+curl --get "http://127.0.0.1:8000/experimental/muvera/real/search" \
+  --data-urlencode "q=what is the blockchain signature?" \
   --data-urlencode "top_k=5" \
-  --data-urlencode "rerank_k=10" | python -m json.tool
+  --data-urlencode "rerank_k=10" | python3 -m json.tool
+
 ```
 
 ## Practical Comparison

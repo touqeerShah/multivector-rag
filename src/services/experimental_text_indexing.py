@@ -10,6 +10,7 @@ from uuid import uuid4
 from src.retrieval.store import RetrievalStore
 from src.retrieval.collection_export import CollectionExporter
 from src.retrieval.colbert_service import OfficialColBERTService
+from src.retrieval.quality import filter_retrievable_rows
 
 
 class ExperimentalTextIndexingService:
@@ -65,6 +66,8 @@ class ExperimentalTextIndexingService:
         self._append_log("Loading text rows from the retrieval store.")
         rows = self.store.all_text_rows()
         self._append_log(f"Loaded {len(rows)} text rows.")
+        rows = filter_retrievable_rows(rows)
+        self._append_log(f"Retained {len(rows)} retrieval-worthy rows after chunk quality filtering.")
 
         self._append_log("Exporting collection TSV and PID mapping for ColBERT.")
         export_result = self.exporter.export_collection_tsv(rows)

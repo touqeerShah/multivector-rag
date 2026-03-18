@@ -46,7 +46,7 @@ class StubStore:
             {
                 "id": "doc-1",
                 "doc_id": "a",
-                "chunk_text": "alpha beta",
+                "chunk_text": "Alpha beta gamma delta explains the notice requirement.",
                 "source_file": "docs/a.pdf",
                 "page_number": 1,
                 "vector": [0.1, 0.2],
@@ -54,7 +54,7 @@ class StubStore:
             {
                 "id": "doc-2",
                 "doc_id": "b",
-                "chunk_text": "gamma delta",
+                "chunk_text": "Gamma delta epsilon zeta describes the renewal term.",
                 "source_file": "docs/b.pdf",
                 "page_number": 2,
                 "vector": [0.3, 0.4],

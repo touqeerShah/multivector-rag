@@ -36,7 +36,7 @@ def split_markdown_by_headings(markdown_text: str) -> List[Dict[str, Any]]:
     lines = markdown_text.splitlines()
     sections: List[Dict[str, Any]] = []
 
-    current_heading = "Document Start"
+    current_heading = ""
     current_level = 0
     current_content: List[str] = []
 

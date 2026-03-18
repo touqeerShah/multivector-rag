@@ -12,6 +12,7 @@ from colbert.modeling.checkpoint import Checkpoint
 
 from src.retrieval.colbert_service import ensure_colbert_runtime_compatible
 from src.retrieval.muvera_encoder import MuveraEncoder
+from src.retrieval.quality import filter_retrievable_rows
 from src.retrieval.muvera_store import MuveraStore
 from src.retrieval.store import RetrievalStore
 
@@ -43,7 +44,7 @@ class ExperimentalRealMuveraService:
         top_docs: int | None = None,
         batch_size: int = 8,
     ) -> Dict[str, Any]:
-        rows = self.store.all_text_rows()
+        rows = filter_retrievable_rows(self.store.all_text_rows())
         if top_docs is not None:
             rows = rows[:top_docs]
 
@@ -262,7 +263,7 @@ class ExperimentalRealMuveraService:
         return self.vector_dir / f"{safe_name}--{digest}.pt"
 
     def _join_hits_with_metadata(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        row_map = {row["id"]: row for row in self.store.all_text_rows()}
+        row_map = {row["id"]: row for row in filter_retrievable_rows(self.store.all_text_rows())}
         joined = []
 
         for hit in hits:

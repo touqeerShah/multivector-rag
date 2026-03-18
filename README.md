@@ -431,11 +431,11 @@ curl --get "http://127.0.0.1:8000/answer" \
 
 
 curl -X POST "http://127.0.0.1:8000/experimental/muvera/reindex" \
-  --get --data-urlencode "max_subvectors_per_doc=8" | python -m json.tool
+  --get --data-urlencode "max_subvectors_per_doc=8" | python3 -m json.tool
 
 curl --get "http://127.0.0.1:8000/experimental/muvera/search" \
   --data-urlencode "q=what is the termination notice period?" \
-  --data-urlencode "top_k=5" | python -m json.tool
+  --data-urlencode "top_k=5" | python3 -m json.tool
 
 
 

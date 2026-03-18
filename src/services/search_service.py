@@ -5,9 +5,8 @@ from typing import Dict, Any
 from src.retrieval.store import RetrievalStore
 from src.retrieval.bm25 import BM25Index
 from src.retrieval.hybrid import reciprocal_rank_fusion
+from src.retrieval.quality import filter_retrievable_rows
 from src.services.rerank_service import RerankService
-
-
 
 class SearchService:
     def __init__(self, embedder):
@@ -17,7 +16,7 @@ class SearchService:
         self.rerank_service = RerankService()
 
     def rebuild_bm25(self):
-        rows = self.store.all_text_rows()
+        rows = filter_retrievable_rows(self.store.all_text_rows())
         self.bm25.build(rows)
 
     def _public_hits(self, hits):
@@ -37,7 +36,9 @@ class SearchService:
         bm25_hits = self.bm25.search(query, top_k=top_k)
 
         query_vector = self.embedder.embed_query(query)
-        dense_hits = self.store.text_vector_search(query_vector, top_k=top_k)
+        dense_hits = filter_retrievable_rows(
+            self.store.text_vector_search(query_vector, top_k=max(top_k * 5, 20))
+        )[:top_k]
 
         hybrid_hits = reciprocal_rank_fusion(bm25_hits, dense_hits)
         hybrid_top = hybrid_hits[: max(top_k, 20)]

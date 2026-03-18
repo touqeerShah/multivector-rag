@@ -6,9 +6,9 @@ from uuid import uuid4
 
 from src.ingest.pdf import extract_pdf_markdown_and_images, extract_txt_text
 from src.ingest.chunking import chunk_text, markdown_to_semantic_chunks
-# from src.retrieval.dense import DenseEmbedder
 from src.retrieval.store import RetrievalStore
 from src.retrieval.bm25 import BM25Index
+from src.retrieval.quality import is_low_value_chunk
 
 
 class IndexingService:
@@ -57,7 +57,11 @@ class IndexingService:
     def _build_rows_from_text(
         self, doc_id: str, source_file: str, text: str
     ) -> List[Dict[str, Any]]:
-        chunks = chunk_text(text)
+        chunks = [
+            chunk
+            for chunk in chunk_text(text)
+            if not is_low_value_chunk(chunk)
+        ]
         vectors = self.embedder.embed_texts(chunks) if chunks else []
 
         rows: List[Dict[str, Any]] = []
@@ -88,7 +92,14 @@ class IndexingService:
         rows: List[Dict[str, Any]] = []
 
         for page in pages:
-            semantic_chunks = markdown_to_semantic_chunks(page["markdown"])
+            semantic_chunks = [
+                chunk_info
+                for chunk_info in markdown_to_semantic_chunks(page["markdown"])
+                if not is_low_value_chunk(
+                    chunk_info["chunk_text"],
+                    heading=chunk_info["section_heading"],
+                )
+            ]
 
             if semantic_chunks:
                 texts = [c["chunk_text"] for c in semantic_chunks]
@@ -115,7 +126,11 @@ class IndexingService:
                 continue
 
             # Fallback if markdown structure is weak or empty
-            fallback_chunks = chunk_text(page["text"])
+            fallback_chunks = [
+                chunk
+                for chunk in chunk_text(page["text"])
+                if not is_low_value_chunk(chunk)
+            ]
             vectors = (
                 self.embedder.embed_texts(fallback_chunks) if fallback_chunks else []
             )

@@ -6,6 +6,7 @@ from src.retrieval.store import RetrievalStore
 from src.retrieval.bm25 import BM25Index
 from src.retrieval.hybrid import reciprocal_rank_fusion
 from src.retrieval.colbert_service import OfficialColBERTService
+from src.retrieval.quality import filter_retrievable_rows
 
 
 class ExperimentalSearchService:
@@ -16,7 +17,7 @@ class ExperimentalSearchService:
         self.colbert = OfficialColBERTService()
 
     def rebuild_bm25(self):
-        rows = self.store.all_text_rows()
+        rows = filter_retrievable_rows(self.store.all_text_rows())
         self.bm25.build(rows)
 
     def _public_hits(self, hits):
@@ -31,7 +32,7 @@ class ExperimentalSearchService:
         return public_hits
 
     def _join_hits_with_metadata(self, hits):
-        row_map = {row["id"]: row for row in self.store.all_text_rows()}
+        row_map = {row["id"]: row for row in filter_retrievable_rows(self.store.all_text_rows())}
         joined = []
         for hit in hits:
             row = row_map.get(hit["id"])
@@ -45,7 +46,9 @@ class ExperimentalSearchService:
         bm25_hits = self.bm25.search(query, top_k=top_k)
 
         query_vector = self.embedder.embed_query(query)
-        dense_hits = self.store.text_vector_search(query_vector, top_k=top_k)
+        dense_hits = filter_retrievable_rows(
+            self.store.text_vector_search(query_vector, top_k=max(top_k * 5, 20))
+        )[:top_k]
 
         hybrid_hits = reciprocal_rank_fusion(bm25_hits, dense_hits)
 
