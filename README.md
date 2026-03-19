@@ -1,476 +1,196 @@
-# Multivector RAG (Retrieval-Augmented Generation)
+# Multivector RAG
 
-## ✅ Project Overview
-This repository implements a **hybrid multi-vector retrieval pipeline** for PDF documents, combining:
+Multivector RAG is a FastAPI project for PDF retrieval and grounded answering. It supports:
 
-- **Text retrieval** (BM25 + dense embeddings)
-- **Visual retrieval** (page images + multivector embeddings)
-- **Reranking** (ColBERT for text, ColQwen2 for page images)
-- **Answer generation** with citations and metrics
+- text ingestion and retrieval
+- visual page retrieval with ColQwen2
+- official ColBERT indexing and search
+- experimental MUVERA candidate retrieval
+- cited answer generation from retrieved evidence
 
-The end goal is a system that can answer queries using both **textual content** and **visual layout/context** from PDFs.
+## Overview
 
----
+The project is split into two runtime apps because the dependency stacks are different:
 
-## 🔍 Architecture (End-to-End Flow)
+- `src.main_colpali:app`
+  Use for text endpoints plus visual page embedding and visual search.
+- `src.main_colbert:app`
+  Use for text endpoints plus official ColBERT and real ColBERT-backed MUVERA experiments.
 
-1. **User query**
-2. **LangGraph router** selects retrieval paths
-3. **Stage 1 – Candidate retrieval**
-   - BM25 over extracted text chunks
-   - Dense text retrieval
-   - MUVERA/FDE proxy retrieval for multi-vector page embeddings
-4. **Stage 2 – Reranking**
-   - ColBERT for text chunk reranking
-   - ColQwen2 for page-image candidate reranking
-5. **Context packer** (merges retrieval results)
-6. **Answer generation** (LLM prompt with context)
-7. **Citations + metrics**
+Both apps share the same data directories, so you can ingest documents in one app and search them from the other.
 
----
+## Project Layout
 
-## 🧱 PDF Data Model (Two Views)
+For a file-by-file explanation of the codebase and request flow, see:
 
-To support hybrid retrieval, PDFs are stored in two parallel views:
+- [docs/project-structure.md](/Users/touqeershah/Documents/PharmaTraceProject-Files/multivector-rag/docs/project-structure.md)
+- [docs/real-colbert-muvera.md](/Users/touqeershah/Documents/PharmaTraceProject-Files/multivector-rag/docs/real-colbert-muvera.md)
 
-### 1) Text View
-- Extracted text
-- OCR output
-- Chunked text segments (for BM25 / dense retrieval)
+## Prerequisites
 
-### 2) Visual Page View
-- Rendered page images
-- Page-level multivector embeddings (ColQwen2)
+- Python `3.11`
+- [`uv`](https://docs.astral.sh/uv/)
+- `git`
 
-This allows covering both **pure text search** and **visual/graphical retrieval** without forcing all queries through expensive visual pipelines.
+Optional:
 
----
+- Tesseract language data if you want OCR support during PDF extraction
 
-## 🚀 Quick Start (Local Development)
+## Setup
 
-### 1) Create and activate Python environment
+### 1. Install dependencies
+
 ```bash
-uv python install 3.10
-uv venv --python 3.10 .venv-colbert
-source .venv-colbert/bin/activate
-
-source colbert-env/.venv/bin/activate
 uv sync --project colbert-env
-deactivate
-
-source colpali-env/.venv/bin/activate
 uv sync --project colpali-env
-deactivate
-
-python -m uvicorn src.main_colbert:app --reload
 ```
 
-### 2) Install dependencies
+### 2. Install MUVERA dependency
+
 ```bash
-uv sync --project colbert-env
-uv sync --project colpali-env
 mkdir -p external
 git clone https://github.com/sionic-ai/muvera-py.git external/muvera-py
 ```
 
-Do not install `colbert-ai` and `colpali-engine` into the same environment. `colpali-engine` requires `transformers>=5`, while the official ColBERT path in this repo needs the dedicated `colbert-env` project.
+### 3. Important environment rule
 
-### 3) Run the API server
+Do not install `colbert-ai` and `colpali-engine` into the same Python environment.
+
+- `colpali-engine` requires newer `transformers`
+- the official ColBERT path in this repo requires the dedicated `colbert-env`
+
+## Run The Apps
+
+### ColPali App
+
+Use this for:
+
+- `/upload`
+- `/search`
+- `/answer`
+- `/ingest/pdf`
+- `/debug/pages`
+- `/visual/embed-pages`
+- `/visual/search`
+- `/experimental/muvera/reindex`
+- `/experimental/muvera/search`
+
+Run:
+
 ```bash
-uv run --project colbert-env uvicorn src.main_colbert:app --reload
-uv run --project colpali-env uvicorn src.main_colpali:app --reload
-
-source .venv-colbert/bin/activate
-python -m uvicorn src.main_colbert:app --reload
-
-source .venv-colpali/bin/activate
-python -m uvicorn src.main_colpali:app --reload
-```
-
-`src.main_colbert:app` includes the text endpoints and the official ColBERT experimental routes. `src.main_colpali:app` includes the text endpoints plus the visual endpoints, and only loads the visual model when a visual endpoint is called.
-
-`src.main:app` is kept as a text-only compatibility alias to `src.main_colbert:app`.
-
-For ColBERT endpoints, do not use `uv run uvicorn src.main:app --reload` from the repository root. That command resolves the root project dependency set and can pull in `transformers>=5`, which breaks `colbert-ai`.
-
----
-
-## 🧪 Basic API Usage
-
-### Upload / Ingest a PDF
-```bash
-curl -X POST "http://127.0.0.1:8000/ingest/pdf" \
-  -F "file=@$/home/ubuntu/file-sample_150kB.pdf"
-```
-
-### Search (text retrieval)
-```bash
-curl --get "http://127.0.0.1:8000/search" \
-  --data-urlencode "q=prompt" \
-  --data-urlencode "top_k=5" | python -m json.tool
-```
-
-### Answer With Citations
-```bash
-curl --get "http://127.0.0.1:8000/answer" \
-  --data-urlencode "q=what is the termination notice period?" \
-  --data-urlencode "top_k=5" \
-  --data-urlencode "evidence_k=3" | python -m json.tool
-```
-
-### Experimental MUVERA Proxy Search
-```bash
-curl -X POST "http://127.0.0.1:8000/experimental/muvera/reindex" \
-  --get --data-urlencode "max_subvectors_per_doc=8" | python -m json.tool
-
-curl --get "http://127.0.0.1:8000/experimental/muvera/search" \
-  --data-urlencode "q=what is the termination notice period?" \
-  --data-urlencode "top_k=5" | python -m json.tool
-```
-
-This experimental endpoint returns:
-
-- `muvera`: fixed-dimensional MUVERA proxy hits
-- `dense`: standard dense results from `/search`
-- `hybrid`: standard hybrid results from `/search`
-
-Use it to compare candidate ordering and overlap without returning raw vectors in the API response.
-
-### Visual Search (page images + ColQwen2)
-```bash
-curl -X POST "http://127.0.0.1:8000/visual/embed-pages" | python -m json.tool
-
-curl --get "http://127.0.0.1:8000/visual/search" \
-  --data-urlencode "q=prompt" \
-  --data-urlencode "top_k=5" | python -m json.tool
-```
-
-### Debug: Inspect Page Records
-```bash
-curl "http://127.0.0.1:8000/debug/pages" | python -m json.tool
-
-
-```
-
-
-Step 10: what to run
-
-After you already uploaded and indexed documents into LanceDB, run:
-
-curl -X POST "http://127.0.0.1:8000/experimental/colbert/reindex" | python3 -m json.tool
-
-Or start it in the background and poll progress:
-
-curl -X POST "http://127.0.0.1:8000/experimental/colbert/reindex/background" | python3 -m json.tool
-
-curl "http://127.0.0.1:8000/experimental/colbert/reindex/status" | python3 -m json.tool
-
-Then compare:
-
-curl --get "http://127.0.0.1:8000/experimental/search" \
-  --data-urlencode "q=signatures" \
-  --data-urlencode "top_k=5" | python -m json.tool
-
-That gives you:
-
-BM25
-
-dense
-
-hybrid
-
-real ColBERT retrieval
-
-using the official ColBERT index/search APIs.
----
-
-## 🧭 Milestones (Roadmap)
-
-### Milestone 1 – Core Ingestion + API
-- ✅ FastAPI running with `/health`
-- ✅ PDF extraction → text + page images
-- ✅ Basic test coverage
-
-### Milestone 2 – Baseline Retrieval
-- BM25 retrieval (text)
-- Dense retrieval (text)
-- Hybrid RRF fusion
-- Single `/search` endpoint
-
-### Milestone 3 – Visual Page Store
-- Store page metadata (page number, PDF reference, etc.)
-- Store page image paths
-- Store placeholder visual embeddings
-- One `/ingest/pdf` endpoint
-
-### Milestone 4 – ColQwen2 Embeddings (Visual Retrieval)
-- Query embeddings (ColQwen2)
-- Page-image embeddings (ColQwen2)
-- Page-level candidate scoring
-
-> **Design note:** For now, we do **not** store full multi-vectors in LanceDB. Instead:
-> - Pool ColQwen2 page embeddings into a single page vector
-> - Pool ColQwen2 query embeddings into one vector
-> - Use page-level vector search for first-stage retrieval
->
-> This enables real ColQwen2 retrieval without full late interaction—while leaving a clean path to full multi-vector scoring later.
-
-### Milestone 5 – ColBERT Reranking (Text)
-- Rerank top chunks using ColBERT (late interaction)
-- Compare baseline vs. reranked results
-
-> Recommended approach:
-> - Start with reranking only (no full ColBERT index)
-> - Rerank top 20–50 chunks (fast and easy)
-> - Provides immediate quality improvement with minimal engineering overhead
-
----
-
-## 📌 Notes & Tips
-- The system uses a **hybrid retrieval stack** (text + visual) to avoid forcing every query through the expensive visual pipeline.
-- The routing logic is handled by **LangGraph** to decide which retrieval paths to run.
-
----
-
-## ✅ Next Steps
-- Make sure `uvicorn` is running
-- Upload a PDF with `/ingest/pdf`
-- Run `/search` and `/visual/search`
-- Inspect `/debug/pages` to verify ingestion
-
----
-
-## 📄 References
-- ColQwen2 via `colpali-engine` (multi-vector embeddings)
-- ColBERT reranking (late interaction)
-- LanceDB (vector store + retrieval)
-
-
-Add MUVERA proxy stage:
-
-plug FDE/proxy encoding behind MuveraProxyIndex
-
-use it only for candidate generation
-
-keep ColBERT/ColQwen2 for final rerank
-
-Important design decision
-
-Do not try to store raw ColBERT token embeddings inside LanceDB first.
-
-For your first real test:
-
-store muvera_vector in LanceDB
-
-keep colbert_vectors on disk as files keyed by chunk id
-
-Why:
-
-LanceDB is good for single-vector retrieval
-
-ColBERT multivectors are variable-length token embeddings
-
-storing them as sidecar .npy or .pt files is simpler for experimentation
-
-So a good storage layout is:
-
-data/
-  lancedb/
-  colbert_vectors/
-    <chunk_id>.pt
-
-Then:
-
-MUVERA retrieves candidate chunk IDs from LanceDB
-
-ColBERT reranker loads the .pt token embeddings for those candidate IDs
-
-scores them against the query token embeddings
-
-That gives you the real algorithmic behavior without fighting the database.
-
-Real Milestone 6 flow
-Ingestion
-
-For each chunk:
-
-compute dense vector
-
-compute ColBERT token embeddings
-
-save token embeddings to disk
-
-compute MUVERA FDE from those token embeddings
-
-store row in LanceDB with:
-
-id
-
-chunk_text
-
-vector
-
-muvera_vector
-
-metadata
-
-Search
-
-BM25 hits
-
-dense hits
-
-MUVERA hits from muvera_vector
-
-union candidates
-
-ColBERT rerank candidates using saved token embeddings
-
-return final ranked list
-
-
-Milestone 7
-
-Add answer generation and citations:
-
-retrieve top evidence
-
-build prompt
-
-return cited answer
-
-That sequence keeps the project usable at every step.
-
-
-==============
-I would make your first week look like this:
-
-Day 1
-
-initialize with uv
-
-create folders
-
-make FastAPI run
-
-write chunking and PDF extraction
-
-Day 2
-
-build BM25
-
-build dense retriever
-
-add hybrid fusion
-
-test on 2–3 sample PDFs
-
-Day 3
-
-add page-image indexing schema
-
-store image paths + page metadata
-
-expose /ingest/pdf
-
-Day 4
-
-add ColQwen2 wrapper interface
-
-add ColBERT wrapper interface
-
-implement router
-
-Day 5
-
-wire LangGraph around the flow
-
-add logs and debug payloads
-
-start evaluation dataset
-
-That gets you a working skeleton without hiding the architecture.
-
-
-
-oncrete target architecture
-User query
-  -> SearchService
-      -> BM25
-      -> dense
-      -> hybrid RRF
-      -> MUVERA proxy candidates (later)
-      -> ColBERTReranker
-      -> ColQwen2 visual reranker (for page queries)
-  -> AnswerService
-      -> prompt builder
-      -> grounded answer
-      -> citations
-
-  
-
-curl -X POST "http://localhost:8000/upload" \
-  -F "file=@/home/ubuntu/1063effa-59cc-4df4-aeee-d2cf94f69178_en?filename=Blockchain_For_Beginners_A_EUBOF_Guide.pdf"
-
-curl -X POST "http://localhost:8000/ingest/pdf" \
-  -F "file=@/home/ubuntu/1063effa-59cc-4df4-aeee-d2cf94f69178_en?filename=Blockchain_For_Beginners_A_EUBOF_Guide.pdf"
-
-curl "http://localhost:8000/debug/pages" | python -m json.tool
-
-curl -X POST "http://localhost:8000/visual/embed-pages" | python3 -m json.tool
-
-curl --get "http://localhost:8000/visual/search" \
-  --data-urlencode "q=signatures" \
-  --data-urlencode "top_k=5" | python3 -m json.tool
-
-
-curl --get "http://127.0.0.1:8000/answer" \
-  --data-urlencode "q=what is the termination notice period?" \
-  --data-urlencode "top_k=5" \
-  --data-urlencode "evidence_k=3" | python -m json.tool
-
-
-curl -X POST "http://127.0.0.1:8000/experimental/muvera/reindex" \
-  --get --data-urlencode "max_subvectors_per_doc=8" | python3 -m json.tool
-
-curl --get "http://127.0.0.1:8000/experimental/muvera/search" \
-  --data-urlencode "q=what is the termination notice period?" \
-  --data-urlencode "top_k=5" | python3 -m json.tool
-
-
-
-
-
-Use this sequence.
-source .venv-colbert/bin/activate
-python -m uvicorn src.main_colbert:app --reload --port 8001
-
-**ColPali App**
-Run first:
-```bash
-source .venv-colpali/bin/activate
+source colpali-env/.venv/bin/activate
 python -m uvicorn src.main_colpali:app --reload --port 8000
 ```
 
-Then call APIs in this order:
+Or with `uv`:
+
+```bash
+uv run --project colpali-env uvicorn src.main_colpali:app --reload --port 8000
+```
+
+### ColBERT App
+
+Use this for:
+
+- `/upload`
+- `/search`
+- `/answer`
+- `/experimental/colbert/reindex`
+- `/experimental/colbert/reindex/background`
+- `/experimental/colbert/reindex/status`
+- `/experimental/search`
+- `/experimental/muvera/real/reindex`
+- `/experimental/muvera/real/search`
+
+Run:
+
+```bash
+source colbert-env/.venv/bin/activate
+python -m uvicorn src.main_colbert:app --reload --port 8001
+```
+
+Or with `uv`:
+
+```bash
+uv run --project colbert-env uvicorn src.main_colbert:app --reload --port 8001
+```
+
+Do not run:
+
+```bash
+uv run uvicorn src.main:app --reload
+```
+
+from the repository root for ColBERT work. That can resolve the wrong dependency set and break the official ColBERT runtime.
+
+## Endpoint Summary
+
+### Shared text endpoints
+
+Available on both apps:
+
+- `GET /health`
+- `POST /upload`
+- `GET /search`
+- `GET /answer`
+- `GET /debug/rows`
+- `POST /experimental/muvera/reindex`
+- `GET /experimental/muvera/search`
+
+### Visual endpoints
+
+Available on `src.main_colpali:app`:
+
+- `POST /ingest/pdf`
+- `GET /debug/pages`
+- `POST /visual/embed-pages`
+- `GET /visual/search`
+
+### ColBERT-only endpoints
+
+Available on `src.main_colbert:app`:
+
+- `POST /experimental/colbert/reindex`
+- `POST /experimental/colbert/reindex/background`
+- `GET /experimental/colbert/reindex/status`
+- `GET /experimental/search`
+- `POST /experimental/muvera/real/reindex`
+- `GET /experimental/muvera/real/search`
+
+## Recommended API Flow
+
+### 1. Text flow
+
+Run against the ColPali app on port `8000` or the ColBERT app on port `8001`.
+
+Health check:
+
 ```bash
 curl "http://127.0.0.1:8000/health" | python -m json.tool
 ```
 
+Upload and index a file:
+
 ```bash
 curl -X POST "http://127.0.0.1:8000/upload" \
-  -F "file=@/absolute/path/to/file.pdf" | python -m json.tool
+  -F "file=@/absolute/path/to/document.pdf" | python -m json.tool
 ```
+
+Inspect stored text rows:
 
 ```bash
 curl "http://127.0.0.1:8000/debug/rows?limit=5" | python -m json.tool
 ```
 
+Text search:
+
 ```bash
 curl --get "http://127.0.0.1:8000/search" \
   --data-urlencode "q=your question" \
   --data-urlencode "top_k=5" | python -m json.tool
 ```
+
+Answer with citations:
 
 ```bash
 curl --get "http://127.0.0.1:8000/answer" \
@@ -479,19 +199,30 @@ curl --get "http://127.0.0.1:8000/answer" \
   --data-urlencode "evidence_k=3" | python -m json.tool
 ```
 
-For visual flow on the same PDF:
+### 2. Visual flow
+
+Run against the ColPali app on port `8000`.
+
+Ingest page records and images:
+
 ```bash
 curl -X POST "http://127.0.0.1:8000/ingest/pdf" \
-  -F "file=@/absolute/path/to/file.pdf" | python -m json.tool
+  -F "file=@/absolute/path/to/document.pdf" | python -m json.tool
 ```
+
+Inspect page rows:
 
 ```bash
 curl "http://127.0.0.1:8000/debug/pages?limit=5" | python -m json.tool
 ```
 
+Embed stored page images:
+
 ```bash
 curl -X POST "http://127.0.0.1:8000/visual/embed-pages" | python -m json.tool
 ```
+
+Visual search:
 
 ```bash
 curl --get "http://127.0.0.1:8000/visual/search" \
@@ -499,67 +230,183 @@ curl --get "http://127.0.0.1:8000/visual/search" \
   --data-urlencode "top_k=5" | python -m json.tool
 ```
 
-Optional experimental MUVERA proxy:
+Notes:
+
+- page embeddings are stored in the page table as `visual_vector`
+- API responses expose page metadata and scores, not raw vectors
+- `GET /debug/pages` is the easiest way to verify that page embeddings were created
+
+### 3. Proxy MUVERA flow
+
+Run against the ColPali app on port `8000` or the ColBERT app on port `8001`.
+
+Build the proxy MUVERA index:
+
 ```bash
 curl -X POST "http://127.0.0.1:8000/experimental/muvera/reindex" \
   --get --data-urlencode "max_subvectors_per_doc=8" | python -m json.tool
 ```
 
+Search with proxy MUVERA:
+
 ```bash
 curl --get "http://127.0.0.1:8000/experimental/muvera/search" \
   --data-urlencode "q=your question" \
-  --data-urlencode "top_k=5" | python -m json.tool
+  --data-urlencode "top_k=5" \
+  --data-urlencode "max_query_subvectors=6" | python -m json.tool
 ```
 
-**ColBERT App**
-Run separately:
-```bash
-source .venv-colbert/bin/activate
-python -m uvicorn src.main_colbert:app --reload --port 8001
-```
+This endpoint compares:
 
-Then call:
+- `muvera`
+- `dense`
+- `hybrid`
+
+### 4. Official ColBERT flow
+
+Run against the ColBERT app on port `8001`.
+
+Build the official ColBERT index:
+
 ```bash
 curl -X POST "http://127.0.0.1:8001/experimental/colbert/reindex" | python -m json.tool
 ```
 
-Or background mode:
+Or run it in the background:
+
 ```bash
 curl -X POST "http://127.0.0.1:8001/experimental/colbert/reindex/background" | python -m json.tool
 ```
+
+Poll background status:
 
 ```bash
 curl "http://127.0.0.1:8001/experimental/colbert/reindex/status" | python -m json.tool
 ```
 
-Then compare official ColBERT search:
+Search with the official ColBERT index:
+
 ```bash
 curl --get "http://127.0.0.1:8001/experimental/search" \
   --data-urlencode "q=your question" \
   --data-urlencode "top_k=5" | python -m json.tool
 ```
 
+### 5. Real ColBERT-backed MUVERA flow
+
+Run against the ColBERT app on port `8001`.
+
+Build the real MUVERA index from saved ColBERT document multivectors:
+
+```bash
 curl -X POST "http://127.0.0.1:8001/experimental/muvera/real/reindex" | python -m json.tool
+```
+
+Optional smaller build:
+
+```bash
+curl -X POST "http://127.0.0.1:8001/experimental/muvera/real/reindex" \
+  --get \
+  --data-urlencode "top_docs=50" \
+  --data-urlencode "batch_size=8" | python -m json.tool
+```
+
+Search with real ColBERT-backed MUVERA:
+
+```bash
 curl --get "http://127.0.0.1:8001/experimental/muvera/real/search" \
   --data-urlencode "q=your question" \
   --data-urlencode "top_k=5" \
   --data-urlencode "rerank_k=10" | python -m json.tool
+```
 
+This endpoint returns:
 
-**Recommended Full End-to-End Order**
-1. Start `main_colpali` on `8000`
-2. `POST /upload`
-3. `GET /debug/rows`
-4. `GET /search`
-5. `GET /answer`
-6. `POST /ingest/pdf`
-7. `GET /debug/pages`
-8. `POST /visual/embed-pages`
-9. `GET /visual/search`
-10. Optional: `POST /experimental/muvera/reindex`
-11. Optional: `GET /experimental/muvera/search`
-12. Start `main_colbert` on `8001`
-13. `POST /experimental/colbert/reindex`
-14. `GET /experimental/search`
+- `muvera_candidates`
+- `reranked`
+- `proxy_muvera`
+- `dense`
+- `hybrid`
 
-If you want, I can turn this into one copy-paste bash script with your actual ports and file path placeholders.
+It also includes diagnostic fields inside reranked hits such as:
+
+- `best_query_variant`
+- `best_variant_maxsim_score`
+- `query_term_coverage`
+- `answerability_score`
+- `reference_penalty`
+- `composite_score`
+
+## Example End-to-End Sequence
+
+### Terminal 1: ColPali app
+
+```bash
+source colpali-env/.venv/bin/activate
+python -m uvicorn src.main_colpali:app --reload --port 8000
+```
+
+### Terminal 2: ColBERT app
+
+```bash
+source colbert-env/.venv/bin/activate
+python -m uvicorn src.main_colbert:app --reload --port 8001
+```
+
+### Example request order
+
+1. `POST /upload`
+2. `GET /debug/rows`
+3. `GET /search`
+4. `GET /answer`
+5. `POST /ingest/pdf`
+6. `GET /debug/pages`
+7. `POST /visual/embed-pages`
+8. `GET /visual/search`
+9. `POST /experimental/muvera/reindex`
+10. `GET /experimental/muvera/search`
+11. `POST /experimental/colbert/reindex`
+12. `GET /experimental/search`
+13. `POST /experimental/muvera/real/reindex`
+14. `GET /experimental/muvera/real/search`
+
+## Storage
+
+Important generated data:
+
+- `data/raw`
+  Uploaded source files
+- `data/processed`
+  Extracted page assets
+- `data/lancedb`
+  Text rows and page rows
+- `data/colbert`
+  ColBERT collection export files
+- `data/muvera`
+  Proxy MUVERA vectors
+- `data/muvera_real`
+  Real ColBERT-backed MUVERA vectors
+- `data/colbert_vectors`
+  Saved ColBERT document multivectors as `.pt` files
+
+## Notes
+
+- `/upload` supports `.pdf`, `.txt`, and `.md`
+- `/ingest/pdf` supports `.pdf` only
+- heavy models are loaded lazily where possible
+- raw text and visual vectors are intentionally omitted from the main API-facing search responses
+
+## Development Notes
+
+Useful tests:
+
+```bash
+source colbert-env/.venv/bin/activate
+pytest tests/test_search_service.py tests/test_experimental_real_muvera_service.py tests/test_app_entrypoints.py
+```
+
+If you are onboarding to the codebase, start with:
+
+- [docs/project-structure.md](/Users/touqeershah/Documents/PharmaTraceProject-Files/multivector-rag/docs/project-structure.md)
+- [src/api/text_routes.py](/Users/touqeershah/Documents/PharmaTraceProject-Files/multivector-rag/src/api/text_routes.py)
+- [src/api/visual_routes.py](/Users/touqeershah/Documents/PharmaTraceProject-Files/multivector-rag/src/api/visual_routes.py)

@@ -174,7 +174,8 @@ Connection summary:
 - answer -> answer service -> search service
 - proxy MUVERA reindex -> dense mini-span multivectors -> MUVERA fixed vectors
 - experimental reindex -> export collection -> official ColBERT index build
-- real MUVERA reindex -> ColBERT multivectors -> MUVERA fixed vectors -> optional ColBERT rerank
+- real MUVERA reindex -> ColBERT multivectors -> MUVERA fixed vectors
+- real MUVERA search -> baseline-guided phrase expansion -> larger MUVERA candidate pool -> composite ColBERT rerank
 
 ### `src/api/visual_routes.py`
 
@@ -211,6 +212,7 @@ For PDF:
 
 - extract markdown and images per page
 - create semantic chunks
+- filter low-value chunks before embedding
 - embed chunks with the dense embedder
 - store rows in LanceDB text table
 
@@ -218,6 +220,7 @@ For text files:
 
 - read file text
 - split into chunks
+- filter low-value chunks before embedding
 - embed chunks
 - store rows in LanceDB text table
 
@@ -238,10 +241,12 @@ Uses:
 Pipeline:
 
 1. load all text rows from LanceDB
-2. build BM25
-3. dense vector search
-4. hybrid fusion with RRF
-5. rerank top candidates
+2. filter out low-value or heading-only chunks
+3. build BM25
+4. dense vector search
+5. hybrid fusion with RRF
+6. lexical-overlap gate before reranking
+7. rerank top candidates
 
 Returns:
 
@@ -268,6 +273,7 @@ This is currently extractive and deterministic.
 ### `src/services/rerank_service.py`
 
 - Thin wrapper around the current ColBERT-style reranker.
+- Adds lexical-overlap gating before reranking.
 - Exists so reranking can be replaced later without changing the search service.
 
 ### `src/services/page_indexing.py`
@@ -295,9 +301,10 @@ Responsibilities:
 Pipeline:
 
 1. load text rows from LanceDB
-2. export `data/colbert/collection.tsv`
-3. start official ColBERT indexing
-4. track status/logs for foreground or background runs
+2. filter out low-value or heading-only chunks
+3. export `data/colbert/collection.tsv`
+4. start official ColBERT indexing
+5. track status/logs for foreground or background runs
 
 Used by:
 
@@ -343,9 +350,16 @@ Pipeline:
 2. encode each chunk with the ColBERT checkpoint
 3. save raw ColBERT multivectors to disk
 4. compress each multivector with MUVERA
-5. retrieve candidates from MUVERA
-6. rerank those candidates with real ColBERT MaxSim
-7. compare against proxy MUVERA and normal dense/hybrid search
+5. run baseline dense/hybrid retrieval to mine expansion phrases from the current corpus
+6. build multiple query variants from those mined phrases
+7. retrieve a larger candidate pool from MUVERA across query variants
+8. rerank those candidates with a composite score:
+   - best-variant ColBERT MaxSim
+   - query coverage
+   - lexical overlap
+   - answerability score
+   - structural reference penalty
+9. compare against proxy MUVERA and normal dense/hybrid search
 
 Used by:
 
@@ -415,6 +429,14 @@ Used by:
 
 - Implements reciprocal rank fusion.
 - Merges BM25 and dense result lists into one combined ranking.
+
+### `src/retrieval/quality.py`
+
+- Shared retrieval-quality heuristics.
+- Used to:
+  - filter low-value chunks before indexing
+  - suppress heading-only chunks at retrieval time
+  - compute lexical overlap for rerank gating
 
 ### `src/retrieval/collection_export.py`
 
@@ -616,10 +638,19 @@ Current status:
 ### `tests/test_experimental_real_muvera_service.py`
 
 - Verifies real ColBERT multivectors are saved and used for MUVERA retrieval + ColBERT rerank.
+- Verifies adaptive query expansion and composite rerank behavior.
 
 ### `tests/test_indexing_service.py`
 
 - Verifies text indexing uses the correct store API.
+
+### `tests/test_retrieval_quality.py`
+
+- Verifies low-value chunk filtering and lexical overlap utilities.
+
+### `tests/test_rerank_service.py`
+
+- Verifies lexical-overlap gating before reranking.
 
 ### `tests/test_router.py`
 
@@ -661,10 +692,12 @@ What happens on `/search`:
 
 1. `text_routes.py`
 2. `SearchService`
-3. BM25 + dense vector search
-4. `hybrid.py`
-5. `RerankService`
-6. return ranked candidates
+3. filter low-value or heading-only chunks
+4. BM25 + dense vector search
+5. `hybrid.py`
+6. `RerankService`
+7. lexical-overlap gate
+8. return ranked candidates
 
 What happens on `/answer`:
 
@@ -709,12 +742,15 @@ What happens on `/experimental/muvera/real/search`:
 
 1. `text_routes.py`
 2. `ExperimentalRealMuveraService`
-3. encode query with official ColBERT
-4. retrieve MUVERA candidates
-5. load saved ColBERT multivectors
-6. rerank with ColBERT MaxSim
-7. compare against proxy MUVERA and dense/hybrid search
-8. return candidate and reranked results
+3. run baseline dense/hybrid retrieval
+4. mine expansion phrases from returned content
+5. build multiple query variants
+6. encode query variants with official ColBERT
+7. retrieve a larger MUVERA candidate pool
+8. load saved ColBERT multivectors
+9. rerank with composite ColBERT score
+10. compare against proxy MUVERA and dense/hybrid search
+11. return candidate and reranked results
 
 ## When running `src.main_colpali:app`
 
